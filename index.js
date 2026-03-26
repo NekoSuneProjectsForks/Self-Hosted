@@ -30,7 +30,8 @@ await startFNLB();
 
 setInterval(
 	restartFNLB,
-	isNaN(parseInt(process.env.RESTART_INTERVAL))
+	isNaN(Number(process.env.RESTART_INTERVAL))
 		? 3600000
-		: parseInt(process.env.RESTART_INTERVAL) * 1000
+		: Number(process.env.RESTART_INTERVAL)
 );
+
