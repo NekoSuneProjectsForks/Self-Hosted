@@ -11,6 +11,7 @@
 	"scripts": {
 		"build:css": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify",
 		"start": "npm run build:css && node index.js",
+		"postinstall": "npm rebuild sqlite3 --build-from-source",
 		"start:bun": "bun run build:css && bun run index.js"
 	},
 	"dependencies": {
