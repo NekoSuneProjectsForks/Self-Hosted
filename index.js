@@ -1,37 +1,11 @@
 import 'dotenv/config';
-import FNLB from 'fnlb';
+import { createServer } from './src/server.js';
 
-const fnlb = new FNLB({
-	clusterName: process.env.CLUSTER_NAME || 'Self Hosted Cluster'
+const port = Number.parseInt(process.env.PORT || '3000', 10);
+const host = process.env.HOST || '0.0.0.0';
+
+const { httpServer } = await createServer();
+
+httpServer.listen(port, host, () => {
+	console.log(`Lobby bot dashboard listening on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
 });
-
-async function startFNLB() {
-	await fnlb.start({
-		apiToken: process.env.API_TOKEN,
-		numberOfShards: isNaN(parseInt(process.env.NUMBER_OF_SHARDS))
-			? 2
-			: parseInt(process.env.NUMBER_OF_SHARDS),
-		botsPerShard: isNaN(parseInt(process.env.BOTS_PER_SHARD))
-			? 32
-			: parseInt(process.env.BOTS_PER_SHARD),
-		categories: process.env.CATEGORIES?.split(',').map((c) => c.trim())
-	});
-}
-
-async function restartFNLB() {
-	console.log('Restarting FNLB...');
-
-	await fnlb.stop();
-
-	await startFNLB();
-}
-
-await startFNLB();
-
-setInterval(
-	restartFNLB,
-	isNaN(Number(process.env.RESTART_INTERVAL))
-		? 3600000
-		: Number(process.env.RESTART_INTERVAL)
-);
-

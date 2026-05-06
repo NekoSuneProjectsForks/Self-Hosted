@@ -1,165 +1,45 @@
-﻿# FNLB Self-Hosted Deployment Guide
+# Fortnite Lobby Bot Dashboard
 
-Easily self-host your own **FNLB** cluster using this minimal setup. FNLB is a powerful and scalable system for managing Fortnite bots at scale.
+Self-hosted dashboard for running Fortnite lobby bots with a local `fnbr.js` runtime. Legacy FNLB token/category support is still available as an optional engine, but the default setup no longer needs an FNLB API token.
 
----
+## Features
 
-## 🚀 Prerequisites
+- Login/register system with first-user admin.
+- Dark green Tailwind dashboard.
+- Encrypted SQLite storage for Epic device auth, one-time auth codes, legacy FNLB tokens, config, sessions, and logs.
+- Local `fnbr.js` bot runtime with party, friend, blocked-user, presence, cosmetics, chat, and command actions.
+- Session history with manual console stats, PC replay uploads, and screenshot/video evidence uploads.
+- Admin user management, suspensions, and remote start/stop.
 
-Before you begin, make sure you have the following installed and ready:
-
-- **Node.js** (version 22 or newer) – [Download Node.js](https://nodejs.org/)
-- A valid **[FNLB API Token](https://app.fnlb.net/account)** – required to authenticate with FNLB services
-- *(Optional)* **[Bun](https://bun.sh)** – A fast JavaScript runtime that can be used as an alternative to Node.js
-
----
-
-## 📦 Installation Steps
-
-Follow these steps to get your FNLB cluster up and running:
-
-### 1. Clone the Repository
-
-Download or clone the FNLB self-hosting project to your local machine:
+## Setup
 
 ```bash
-git clone https://github.com/Fortnite-LobbyBot/Self-Hosted.git
-cd Self-Hosted
+npm install
+npm run build:css
+npm start
 ```
 
-> 💡 **Alternatively**, you can manually copy the files into a folder or download the source code as a ZIP.
+Set the dashboard port in `.env`:
 
----
-
-### 2. Install Dependencies
-
-Install required packages with your preferred runtime:
-
-- Using **Node.js**:
-
-  ```bash
-  npm install
-  ```
-
-- Using **Bun**:
-
-  ```bash
-  bun i
-  ```
-
----
-
-### 3. Configure Environment Variables
-
-Rename the `.env.example` file to `.env`:
-
-```bash
-cp .env.example .env
+```env
+PORT=3000
+HOST=0.0.0.0
+DATA_DIR=./data
 ```
 
-Edit the `.env` file with your actual values:
+## Epic Auth
 
-```ini
-API_TOKEN=your_token_here
-CATEGORIES=12345678,98765432
-NUMBER_OF_SHARDS=2
-BOTS_PER_SHARD=32
-RESTART_INTERVAL=3600
-CLUSTER_NAME=Self Hosted Cluster
-```
+The local engine uses Epic device auth through `fnbr.js`.
 
-> 💡 **API Token:** Obtain this from your [FNLB Account](https://app.fnlb.net/account) under “API Tokens”.  
-> 💡 **Category IDs:** Visit the [FNLB Bots Page](https://app.fnlb.net/bots), select a bot, and locate the **“Category ID”** in the **“About this bot”** section.
+In the dashboard Config page, use either:
 
----
+- a one-time Epic authorization code, or
+- existing device auth fields: `accountId`, `deviceId`, and `secret`.
 
-## ▶️ Running the FNLB Cluster
+When a one-time authorization code is used successfully, the app saves the generated device auth encrypted in SQLite and clears the code.
 
-Once configured, start your FNLB instance:
+`fnbr.js` does not use email/password login because Epic commonly requires captcha.
 
-- With **Node.js**:
+## Legacy FNLB Mode
 
-  ```bash
-  npm start
-  ```
-
-- With **Bun**:
-
-  ```bash
-  bun start:bun
-  ```
-
-The cluster will initialize using your configuration and automatically restart on the interval you defined, ensuring long-term stability and uptime.
-
----
-
-## 🌐 Environment Variable Reference
-
-Below is a breakdown of each environment variable used in the setup:
-
-| Variable            | Description                                                                 | Default               |
-|---------------------|-----------------------------------------------------------------------------|-----------------------|
-| `API_TOKEN`         | Your personal FNLB API token                                                | *Required*            |
-| `CATEGORIES`        | Comma-separated list of bot category IDs                                    | *Required*            |
-| `NUMBER_OF_SHARDS`  | Number of individual shards (instances) to spawn                            | `2`                   |
-| `BOTS_PER_SHARD`    | Maximum number of bots assigned to each shard                               | `32`                  |
-| `RESTART_INTERVAL`  | Cluster restart interval in seconds (for stability/maintenance)             | `3600`                |
-| `CLUSTER_NAME`      | The name of the cluster that will appear in the app                         | `Self Hosted Cluster` |
-
----
-
-## 🔄 Keeping FNLB Up to Date
-
-Ensure you're always using the latest and most stable version of FNLB:
-
-1. **Pull the latest changes** from the Git repository:
-
-   ```bash
-   git pull origin main
-   ```
-
-2. **Update dependencies**:
-
-- With **Node.js**:
-
-   ```bash
-   npm update fnlb
-   ```
-
-- With **Bun**:
-
-   ```bash
-   bun update --latest
-   ```
-
-3. **Restart the cluster** to apply changes:
-
-   ```bash
-   npm start
-   # or
-   bun start:bun
-   ```
-
-> ✅ Regular updates provide access to new features, performance boosts, and essential bug fixes.
-
----
-
-## ⚙️ What the Script Does
-
-Once started, the script performs the following:
-
-- Initializes FNLB using your API credentials and environment settings
-- Configures:
-  - Number of **shards** (isolated bot processes)
-  - Maximum **bots per shard**
-  - Allowed **category IDs**
-- Implements automatic restarts for resilience, using the configured time interval
-
----
-
-## 📎 Additional Resources
-
-- [FNLB Official Site](https://fnlb.net)
-- [FNLB Dashboard](https://app.fnlb.net)
-- [FNLB Documentation ](https://docs.fnlb.net)
-
+If you still want the old FNLB runtime/API path, choose `Legacy FNLB cloud API/runtime` in Config and save your FNLB API token and category IDs.

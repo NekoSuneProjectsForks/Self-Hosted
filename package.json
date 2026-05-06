@@ -1,19 +1,32 @@
 {
-	"name": "fnlb-selfhosted",
-	"version": "1.0.0",
+	"name": "fortnite-lobby-bot-dashboard",
+	"version": "1.0.1",
 	"type": "module",
-	"author": "FNLB",
+	"author": "NekoSuneVRAPPS",
 	"private": true,
 	"main": "index.js",
-	"homepage": "https://fnlb.net",
-	"description": "Easily run your own bot using FNLB, a powerful and scalable system for managing Fortnite bots.",
+	"homepage": "",
+	"description": "Self-hosted Fortnite lobby bot dashboard with a local fnbr.js runtime and optional legacy FNLB support.",
 	"license": "ISC",
 	"scripts": {
-		"start": "node index.js",
-		"start:bun": "bun run index.js"
+		"build:css": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify",
+		"start": "npm run build:css && node index.js",
+		"start:bun": "bun run build:css && bun run index.js"
 	},
 	"dependencies": {
+		"bcryptjs": "^3.0.3",
+		"connect-session-sequelize": "^8.0.6",
+		"dotenv": "^17.0.0",
+		"express": "^5.2.1",
+		"express-session": "^1.19.0",
+		"fn-replay-parser": "^1.1.3",
+		"fnbr": "^4.2.0",
 		"fnlb": "latest",
-		"dotenv": "^17.0.0"
+		"lucide": "^1.14.0",
+		"multer": "^2.1.1",
+		"sequelize": "^6.37.8",
+		"socket.io": "^4.8.3",
+		"sqlite3": "^6.0.1",
+		"tailwindcss": "^3.4.19"
 	}
 }

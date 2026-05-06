@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	:root {
+		color-scheme: dark;
+	}
+
+	body {
+		@apply min-h-screen bg-fnlb-950 text-zinc-100 antialiased;
+		background:
+			radial-gradient(circle at 18% 8%, rgba(37, 211, 102, 0.12), transparent 28rem),
+			linear-gradient(135deg, #06110d 0%, #0b1712 48%, #08100d 100%);
+	}
+
+	button,
+	input,
+	textarea,
+	select {
+		letter-spacing: 0;
+	}
+}
+
+@layer components {
+	.shell-panel {
+		@apply border border-white/10 bg-white/[0.045] shadow-glow backdrop-blur-xl;
+	}
+
+	.card {
+		@apply rounded-lg border border-white/10 bg-white/[0.055] p-4 shadow-lg shadow-black/20;
+	}
+
+	.input {
+		@apply w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-fnlb-400 focus:ring-2 focus:ring-fnlb-400/20;
+	}
+
+	.label {
+		@apply mb-2 block text-xs font-semibold uppercase text-zinc-400;
+	}
+
+	.btn {
+		@apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+	}
+
+	.btn-primary {
+		@apply btn bg-fnlb-500 text-fnlb-950 hover:bg-fnlb-400;
+	}
+
+	.btn-secondary {
+		@apply btn border border-white/10 bg-white/[0.06] text-zinc-100 hover:bg-white/[0.1];
+	}
+
+	.btn-danger {
+		@apply btn border border-red-400/30 bg-red-500/15 text-red-100 hover:bg-red-500/25;
+	}
+
+	.nav-item {
+		@apply flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100;
+	}
+
+	.nav-item.active {
+		@apply bg-fnlb-500/15 text-fnlb-300 ring-1 ring-fnlb-400/20;
+	}
+
+	.badge {
+		@apply inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold;
+	}
+}
