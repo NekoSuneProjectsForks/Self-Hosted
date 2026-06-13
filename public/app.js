@@ -2,6 +2,7 @@ const app = document.querySelector('#app');
 
 const state = {
 	authMode: 'login',
+	resetToken: null,
 	view: 'status',
 	user: null,
 	config: null,
@@ -89,6 +90,23 @@ async function api(path, options = {}) {
 	return data;
 }
 
+function detectResetToken() {
+	const params = new URLSearchParams(window.location.search);
+	const token = params.get('reset_token');
+	if (token) {
+		state.resetToken = token;
+		state.authMode = 'reset';
+		return true;
+	}
+	return false;
+}
+
+function clearResetTokenFromUrl() {
+	const url = new URL(window.location.href);
+	url.searchParams.delete('reset_token');
+	window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+}
+
 function runtimeOnline() {
 	return ['starting', 'online', 'restarting', 'stopping'].includes(state.runtime?.status);
 }
@@ -145,8 +163,85 @@ function renderToast() {
 	return `<div class="fixed right-4 top-4 z-50 max-w-sm rounded-lg border px-4 py-3 text-sm shadow-xl ${classes}">${escapeHtml(state.toast.message)}</div>`;
 }
 
+function renderAuthForm() {
+	const mode = state.authMode;
+
+	if (mode === 'forgot') {
+		return `
+			<div class="mb-6">
+				<p class="text-lg font-bold">Forgot your password?</p>
+				<p class="mt-1 text-sm text-zinc-500">Enter your account email and we'll send you a reset link.</p>
+			</div>
+			<form data-form="forgot" class="space-y-4">
+				<label>
+					<span class="label">Email</span>
+					<input class="input" name="email" type="email" autocomplete="email" required />
+				</label>
+				<button class="btn-primary w-full" type="submit" ${state.busy ? 'disabled' : ''}>
+					${icon('mail')} Send reset link
+				</button>
+				<button type="button" class="w-full text-center text-sm text-zinc-400 hover:text-fnlb-300" data-auth-mode="login">Back to login</button>
+			</form>
+		`;
+	}
+
+	if (mode === 'reset') {
+		return `
+			<div class="mb-6">
+				<p class="text-lg font-bold">Choose a new password</p>
+				<p class="mt-1 text-sm text-zinc-500">Set a new password for your account.</p>
+			</div>
+			<form data-form="reset" class="space-y-4">
+				<input type="hidden" name="token" value="${escapeHtml(state.resetToken || '')}" />
+				<label>
+					<span class="label">New password</span>
+					<input class="input" name="password" type="password" autocomplete="new-password" required minlength="8" />
+				</label>
+				<label>
+					<span class="label">Confirm new password</span>
+					<input class="input" name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" />
+				</label>
+				<button class="btn-primary w-full" type="submit" ${state.busy ? 'disabled' : ''}>
+					${icon('key-round')} Reset password
+				</button>
+				<button type="button" class="w-full text-center text-sm text-zinc-400 hover:text-fnlb-300" data-auth-mode="login">Back to login</button>
+			</form>
+		`;
+	}
+
+	const loginActive = mode === 'login';
+	return `
+		<div class="mb-6 flex rounded-lg border border-white/10 bg-black/20 p-1">
+			<button class="flex-1 rounded-md px-3 py-2 text-sm font-semibold ${loginActive ? 'bg-fnlb-500 text-fnlb-950' : 'text-zinc-400'}" data-auth-mode="login">Login</button>
+			<button class="flex-1 rounded-md px-3 py-2 text-sm font-semibold ${!loginActive ? 'bg-fnlb-500 text-fnlb-950' : 'text-zinc-400'}" data-auth-mode="register">Register</button>
+		</div>
+
+		<form data-form="${loginActive ? 'login' : 'register'}" class="space-y-4">
+			${!loginActive ? `
+				<label>
+					<span class="label">Username</span>
+					<input class="input" name="username" autocomplete="username" required minlength="3" maxlength="40" />
+				</label>
+			` : ''}
+			<label>
+				<span class="label">Email</span>
+				<input class="input" name="email" type="email" autocomplete="email" required />
+			</label>
+			<label>
+				<span class="label">Password</span>
+				<input class="input" name="password" type="password" autocomplete="${loginActive ? 'current-password' : 'new-password'}" required minlength="8" />
+			</label>
+			<button class="btn-primary w-full" type="submit" ${state.busy ? 'disabled' : ''}>
+				${icon(loginActive ? 'log-in' : 'user-plus')} ${loginActive ? 'Login' : 'Create Account'}
+			</button>
+			${loginActive ? `
+				<button type="button" class="w-full text-center text-sm text-zinc-400 hover:text-fnlb-300" data-auth-mode="forgot">Forgot your password?</button>
+			` : ''}
+		</form>
+	`;
+}
+
 function renderAuth() {
-	const loginActive = state.authMode === 'login';
 	return `
 		${renderToast()}
 		<main class="flex min-h-screen items-center justify-center p-4">
@@ -177,30 +272,7 @@ function renderAuth() {
 				</div>
 
 				<div class="p-6 sm:p-8">
-					<div class="mb-6 flex rounded-lg border border-white/10 bg-black/20 p-1">
-						<button class="flex-1 rounded-md px-3 py-2 text-sm font-semibold ${loginActive ? 'bg-fnlb-500 text-fnlb-950' : 'text-zinc-400'}" data-auth-mode="login">Login</button>
-						<button class="flex-1 rounded-md px-3 py-2 text-sm font-semibold ${!loginActive ? 'bg-fnlb-500 text-fnlb-950' : 'text-zinc-400'}" data-auth-mode="register">Register</button>
-					</div>
-
-					<form data-form="${loginActive ? 'login' : 'register'}" class="space-y-4">
-						${!loginActive ? `
-							<label>
-								<span class="label">Username</span>
-								<input class="input" name="username" autocomplete="username" required minlength="3" maxlength="40" />
-							</label>
-						` : ''}
-						<label>
-							<span class="label">Email</span>
-							<input class="input" name="email" type="email" autocomplete="email" required />
-						</label>
-						<label>
-							<span class="label">Password</span>
-							<input class="input" name="password" type="password" autocomplete="${loginActive ? 'current-password' : 'new-password'}" required minlength="8" />
-						</label>
-						<button class="btn-primary w-full" type="submit" ${state.busy ? 'disabled' : ''}>
-							${icon(loginActive ? 'log-in' : 'user-plus')} ${loginActive ? 'Login' : 'Create Account'}
-						</button>
-					</form>
+					${renderAuthForm()}
 				</div>
 			</section>
 		</main>
@@ -1312,6 +1384,24 @@ document.addEventListener('submit', async (event) => {
 			state.user = result.user;
 			await refreshAfterAuth();
 		}
+		if (form.dataset.form === 'forgot') {
+			const result = await api('/api/auth/forgot-password', { method: 'POST', body: { email: data.email } });
+			state.authMode = 'login';
+			setToast(result.message || 'If that email exists, a reset link has been sent.');
+			render();
+		}
+		if (form.dataset.form === 'reset') {
+			if (data.password !== data.confirmPassword) throw new Error('Passwords do not match.');
+			const result = await api('/api/auth/reset-password', {
+				method: 'POST',
+				body: { token: data.token, password: data.password }
+			});
+			state.resetToken = null;
+			state.authMode = 'login';
+			clearResetTokenFromUrl();
+			setToast(result.message || 'Password reset. You can now sign in.');
+			render();
+		}
 		if (form.dataset.form === 'config') {
 			const payload = {
 				runtimeMode: data.runtimeMode || 'fnbr',
@@ -1495,6 +1585,11 @@ setInterval(async () => {
 
 (async function init() {
 	try {
+		// A password reset link always takes priority over any existing session.
+		if (detectResetToken()) {
+			render();
+			return;
+		}
 		await loadSession();
 		if (state.user) await refreshAfterAuth();
 		else render();

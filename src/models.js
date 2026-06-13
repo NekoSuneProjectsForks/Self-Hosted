@@ -477,8 +477,44 @@ SessionMedia.init(
 	{ sequelize, modelName: 'SessionMedia' }
 );
 
+export class PasswordReset extends Model {}
+
+PasswordReset.init(
+	{
+		id: {
+			type: DataTypes.UUID,
+			defaultValue: DataTypes.UUIDV4,
+			primaryKey: true
+		},
+		userId: {
+			type: DataTypes.UUID,
+			allowNull: false
+		},
+		tokenHash: {
+			type: DataTypes.STRING(64),
+			allowNull: false,
+			unique: true
+		},
+		expiresAt: {
+			type: DataTypes.DATE,
+			allowNull: false
+		},
+		usedAt: {
+			type: DataTypes.DATE,
+			allowNull: true
+		}
+	},
+	{
+		sequelize,
+		modelName: 'PasswordReset',
+		indexes: [{ fields: ['userId'] }]
+	}
+);
+
 User.hasOne(BotConfig, { foreignKey: 'userId', onDelete: 'CASCADE' });
 BotConfig.belongsTo(User, { foreignKey: 'userId' });
+User.hasMany(PasswordReset, { foreignKey: 'userId', onDelete: 'CASCADE' });
+PasswordReset.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(BotLog, { foreignKey: 'userId', onDelete: 'CASCADE' });
 BotLog.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(QuickCommand, { foreignKey: 'userId', onDelete: 'CASCADE' });

@@ -3,9 +3,11 @@ import connectSessionSequelize from 'connect-session-sequelize';
 import express from 'express';
 import session from 'express-session';
 import multer from 'multer';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { join } from 'node:path';
+import { Op } from 'sequelize';
 import { Server as SocketServer } from 'socket.io';
 import { getPlainConfig, sanitizeConfig, updateLocalCategoryConfig, upsertPlainConfig } from './configStore.js';
 import {
@@ -23,12 +25,14 @@ import {
 	BotLog,
 	initDatabase,
 	normalizeSuspension,
+	PasswordReset,
 	QuickCommand,
 	sequelize,
 	SessionMedia,
 	SessionStat,
 	User
 } from './models.js';
+import { initMailer, sendPasswordResetEmail } from './mailer.js';
 import { searchFortniteCosmetics } from './fortniteItems.js';
 import { mediaDir, publicDir, replayDir, rootDir } from './paths.js';
 import { parseReplayFile } from './replayParser.js';
@@ -64,6 +68,19 @@ function validateAuthInput({ username, email, password }, requireUsername = fals
 	if (String(password ?? '').length < 8) {
 		throw httpError(400, 'Password must be at least 8 characters.');
 	}
+}
+
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function hashToken(token) {
+	return createHash('sha256').update(token).digest('hex');
+}
+
+function resetLinkBase(req) {
+	const configured = process.env.APP_URL?.trim();
+	if (configured) return configured.replace(/\/+$/, '');
+	const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+	return `${proto}://${req.get('host')}`;
 }
 
 function suspensionPayload(user) {
@@ -174,6 +191,7 @@ async function createSessionMiddleware() {
 
 export async function createServer() {
 	await initSecrets();
+	await initMailer();
 	await initDatabase();
 	if ((await User.count()) === 0) {
 		console.log('[Lobby Bot Dashboard] No accounts exist yet. The first registered account will become admin.');
@@ -313,6 +331,75 @@ export async function createServer() {
 	app.post('/api/auth/logout', (req, res) => {
 		req.session.destroy(() => res.json({ ok: true }));
 	});
+
+	app.post(
+		'/api/auth/forgot-password',
+		asyncRoute(async (req, res) => {
+			const email = cleanEmail(req.body.email);
+			// Always respond the same way so the endpoint cannot be used to enumerate accounts.
+			const genericResponse = {
+				ok: true,
+				message: 'If an account exists for that email, a password reset link has been sent.'
+			};
+			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.json(genericResponse);
+
+			const user = await User.findOne({ where: { email } });
+			if (!user) return res.json(genericResponse);
+
+			// Invalidate any outstanding tokens for this user before issuing a new one.
+			await PasswordReset.destroy({ where: { userId: user.id, usedAt: null } });
+
+			const token = randomBytes(32).toString('hex');
+			await PasswordReset.create({
+				userId: user.id,
+				tokenHash: hashToken(token),
+				expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS)
+			});
+
+			const resetUrl = `${resetLinkBase(req)}/?reset_token=${token}`;
+			try {
+				await sendPasswordResetEmail({
+					to: user.email,
+					username: user.username,
+					resetUrl,
+					expiresMinutes: Math.round(PASSWORD_RESET_TTL_MS / 60000)
+				});
+			} catch (error) {
+				console.error(`[Mailer] Failed to send password reset email: ${error.message}`);
+			}
+			return res.json(genericResponse);
+		})
+	);
+
+	app.post(
+		'/api/auth/reset-password',
+		asyncRoute(async (req, res) => {
+			const token = String(req.body.token ?? '').trim();
+			const password = String(req.body.password ?? '');
+			if (!token) throw httpError(400, 'A reset token is required.');
+			if (password.length < 8) throw httpError(400, 'Password must be at least 8 characters.');
+
+			const record = await PasswordReset.findOne({
+				where: {
+					tokenHash: hashToken(token),
+					usedAt: null,
+					expiresAt: { [Op.gt]: new Date() }
+				}
+			});
+			if (!record) throw httpError(400, 'This reset link is invalid or has expired. Request a new one.');
+
+			const user = await User.findByPk(record.userId);
+			if (!user) throw httpError(400, 'This reset link is invalid or has expired. Request a new one.');
+
+			user.passwordHash = await bcrypt.hash(password, 12);
+			await user.save();
+			await record.update({ usedAt: new Date() });
+			// Drop any other outstanding tokens for this account.
+			await PasswordReset.destroy({ where: { userId: user.id, usedAt: null } });
+
+			return res.json({ ok: true, message: 'Your password has been reset. You can now sign in.' });
+		})
+	);
 
 	app.get(
 		'/api/me',
