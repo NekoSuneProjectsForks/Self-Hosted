@@ -132,17 +132,4 @@ export function registerUploadRoutes(ctx) {
 			return res.json({ items, source: 'fortnite-api.com' });
 		})
 	);
-
-	app.get(
-		'/api/admin/overview',
-		requireAdmin,
-		asyncRoute(async (_req, res) => {
-			const [users, admins, suspended] = await Promise.all([
-				User.count(),
-				User.count({ where: { role: 'admin' } }),
-				User.count({ where: { status: 'suspended' } })
-			]);
-			return res.json({ users, admins, suspended });
-		})
-	);
 }

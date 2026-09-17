@@ -13,7 +13,7 @@
 		"start": "npm run build:css && node index.js",
 		"start:bun": "bun run build:css && bun run index.js",
 		"build": "npm run build:css",
-		"test": "node --test tests/"
+		"test": "node --test \"tests/**/*.test.js\""
 	},
 	"dependencies": {
 		"bcryptjs": "^3.0.3",

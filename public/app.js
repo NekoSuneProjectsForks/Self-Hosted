@@ -34,6 +34,7 @@ const statusStyles = {
 	restarting: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
 	stopping: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
 	error: 'border-red-400/40 bg-red-500/10 text-red-200',
+	auth_required: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
 	suspended: 'border-red-400/40 bg-red-500/10 text-red-200'
 };
 
@@ -116,7 +117,37 @@ function runtimeOnlineFor(user) {
 }
 
 function usingLocalFnbr() {
+	// Follow the engine that is actually running. Only fall back to the saved
+	// config when nothing is online, otherwise the UI can end up rendering for a
+	// different engine than the one the bot is on.
+	const active = state.runtime?.activeMode;
+	if (active) return active !== 'fnlb';
 	return state.config?.runtimeMode !== 'fnlb';
+}
+
+function restartRequiredBanner() {
+	if (!state.runtime?.restartRequired) return '';
+	const reason = state.runtime.restartReason || 'Restart required to apply the new configuration';
+	return `
+		<div class="mb-4 flex flex-col gap-3 rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+			<div>
+				<p class="font-semibold">Configuration changed</p>
+				<p class="text-sm text-amber-200/90">${escapeHtml(reason)}</p>
+			</div>
+			<button class="btn-secondary shrink-0" data-action="restart">${icon('refresh-cw')} Restart Now</button>
+		</div>`;
+}
+
+function authRequiredBanner() {
+	if (state.runtime?.status !== 'auth_required' && !state.runtime?.authRequired) return '';
+	return `
+		<div class="mb-4 flex flex-col gap-3 rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+			<div>
+				<p class="font-semibold">Authentication Required</p>
+				<p class="text-sm text-amber-200/90">The stored Epic device auth was rejected. Clear it and sign in again with a new one-time authorization code.</p>
+			</div>
+			<button class="btn-secondary shrink-0" data-action="clear-device-auth">${icon('key-round')} Clear Device Auth</button>
+		</div>`;
 }
 
 function dashboardAvailable() {
@@ -329,6 +360,9 @@ function renderShell() {
 						<button class="btn-danger" data-action="stop" ${!runtimeOnline() ? 'disabled' : ''}>${icon('square')} Stop Cluster</button>
 					</div>
 				</header>
+
+				${restartRequiredBanner()}
+				${authRequiredBanner()}
 
 				${renderView()}
 			</main>
@@ -1289,6 +1323,17 @@ document.addEventListener('click', async (event) => {
 			await loadMe();
 			setToast('Cluster stopped.');
 		}
+		if (action === 'restart') {
+			state.busy = true;
+			await api('/api/bot/restart', { method: 'POST', body: {} });
+			await loadMe();
+			setToast('Runtime restarted with the latest configuration.');
+		}
+		if (action === 'clear-device-auth') {
+			await api('/api/config/device-auth/clear', { method: 'POST', body: {} });
+			await loadMe();
+			setToast('Epic device auth cleared. Enter a new authorization code to sign in again.');
+		}
 		if (action === 'clear-logs') {
 			await api('/api/bot/logs', { method: 'DELETE', body: {} });
 			state.logs = [];
@@ -1305,12 +1350,18 @@ document.addEventListener('click', async (event) => {
 			const mode = document.querySelector('#item-equip-mode')?.value || 'replace';
 			const itemId = button.dataset.itemId;
 			if (!categoryId || !itemId) throw new Error('Choose a category and item first.');
-			await api(`/api/fnlb/categories/${encodeURIComponent(categoryId)}/cosmetics`, {
+			const equipResult = await api(`/api/fnlb/categories/${encodeURIComponent(categoryId)}/cosmetics`, {
 				method: 'PATCH',
 				body: { slot, itemId, mode }
 			});
 			await loadDashboard(false);
-			setToast(usingLocalFnbr() ? 'Item equipped through local fnbr runtime.' : 'Item equipped to FNLB category. No bot restart was requested.');
+			// Only claim a live change when the runtime actually confirmed one.
+			setToast(
+				equipResult?.appliedLive
+					? 'Equipped on the running bot. No restart needed.'
+					: equipResult?.content ||
+							'Saved as the startup loadout. It applies the next time the bot loads.'
+			);
 			render();
 		}
 		if (action === 'close-bot-detail') {

@@ -8,6 +8,19 @@ export function registerAdminRoutes(ctx) {
 	const { app, runtime, requireAuth, requireActive, requireAdmin, io } = ctx;
 
 	app.get(
+		'/api/admin/overview',
+		requireAdmin,
+		asyncRoute(async (_req, res) => {
+			const [users, admins, suspended] = await Promise.all([
+				User.count(),
+				User.count({ where: { role: 'admin' } }),
+				User.count({ where: { status: 'suspended' } })
+			]);
+			return res.json({ users, admins, suspended });
+		})
+	);
+
+	app.get(
 		'/api/admin/users',
 		requireAdmin,
 		asyncRoute(async (_req, res) => {
