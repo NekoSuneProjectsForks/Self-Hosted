@@ -1,6 +1,19 @@
 import 'dotenv/config';
-import { createServer } from './src/server.js';
-import { sequelize } from './src/models/index.js';
+
+// Fail fast with a readable message. Several dependencies (notably
+// connect-session-sequelize 8) require Node 22, and on an older runtime they
+// fail deep inside an import with no useful context.
+const major = Number.parseInt(process.versions.node.split('.')[0], 10);
+if (major < 22) {
+	console.error(
+		`This dashboard requires Node 22 or newer. You are running Node ${process.versions.node}.\n` +
+			'On Pterodactyl, switch the server egg/image to a Node 22 (or newer) build and restart.'
+	);
+	process.exit(1);
+}
+
+const { createServer } = await import('./src/server.js');
+const { sequelize } = await import('./src/models/index.js');
 
 const port = Number.parseInt(process.env.PORT || '3000', 10);
 const host = process.env.HOST || '0.0.0.0';

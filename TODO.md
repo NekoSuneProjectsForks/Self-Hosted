@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-09-17
 
-**Test status: 42/42 unit tests pass · 34/34 live API checks pass against a running server.**
+**Test status: 54/54 unit tests · 34/34 live API checks · 22/22 frontend render checks — all pass.**
 
 ---
 
@@ -131,13 +131,34 @@ modules plus a 167-line wiring file.
 
 ---
 
-## Not done
-- [ ] Frontend Friends / Messages / Lobby / Matches **pages** — the backend and Socket.IO events are ready, but `public/app.js` still has the original single dashboard view
-- [ ] README rewrite
+## Frontend (done)
+- [x] `public/app.js` (1651 lines) split into `public/js/` modules: `core/`, `data/`, `views/`, `actions.js`, `app.js`
+- [x] **Lobby** page — live party, members, cosmetics, match state; ready/unready, sit out, fill, hide, privacy, playlist, presence, invite, kick, promote, leave; leader-only actions labelled
+- [x] **Friends** page — online/offline/incoming/outgoing/blocked with a detail panel; add, accept, decline, cancel, remove, block, unblock, invite, join
+- [x] **Messages** page — DM threads with unread counts, kept separate from lobby chat
+- [x] **Matches** page — current match + history; blank stats where no source supplied them
+- [x] Socket.IO wired for targeted updates (`friend:message`, `party:updated`, `match:*`, `cosmetics:updated`) — no full dashboard reload per event
+- [x] Controls hidden/disabled from the engine capability report
+- [x] README rewritten
 
 ## Deferred, with reasons
-- [ ] **Live FNLB cosmetics** — no verified FNLB live-cosmetic command exists and the task says not to guess command names. The adapter reports `realtimeCosmetics: false` and returns `appliedLive: false` + `requiresReload: true` rather than pretending.
-- [ ] **Multi-account local bots** (`LocalBotAccount`) — the adapter layer leaves room for it; deliberately not built before one local bot is stable.
+- [ ] **Live FNLB cosmetics** — still deferred. The `fnlb` package only starts/stops/updates processes (verified in its typings) and no live cosmetic command is exposed; an attempt to consult the hosted FNLB docs did not yield a verifiable command list. Guessing is explicitly ruled out by the task, so the adapter reports `realtimeCosmetics: false` and returns `appliedLive: false` + `requiresReload: true`.
+- [ ] **Multi-account local bots** (`LocalBotAccount`) — the task says to architect for it but not to build it before one local bot is stable. The adapter layer supports it (one adapter instance per account, `RuntimeManager` already keys by user), so adding it is additive. No unused model was committed.
+
+## Legacy FNLB adapter gap (reported: "does not support declining friend requests")
+- [x] **Root cause**: the FNLB adapter only overrode a handful of methods, so `addFriend`, `acceptFriend`, `declineFriend`, `removeFriend`, `blockUser`, `unblockUser`, `inviteUser`, `joinParty`, `kickMember`, `leaveParty`, `setStatus`, `setPlaylist`, `setReadiness` and `hideMembers` all inherited `BaseRuntime`'s "unsupported" throw. Most of the Friends page and Lobby controls were dead in FNLB mode — a regression from the adapter refactor.
+- [x] Implemented all of the above on top of the **already-verified** `FNLB_COMMANDS` map — no command name was invented
+- [x] Accept ↔ `add_friend`, decline/cancel ↔ `remove_friend`, per Epic's single endpoint pair (confirmed in fnbr's `FriendManager` source and docblocks)
+- [x] Routes now pass `botId` to every adapter call — FNLB needs it to target a bot, and it was being dropped
+- [x] `friendRequests` capability flipped to `true` for FNLB in both the adapter and the offline capability map
+- [x] Guard added: an FNLB cosmetic write without a caller-built config previously would have PATCHed the category with `config: undefined` and **wiped the saved loadout** — now refused with a clear message
+- [x] Still honestly unsupported on FNLB: friend DMs, party privacy, promote, sit out, squad fill, realtime cosmetics, match tracking
+- [x] New test suite `tests/legacyFnlbRuntime.test.js` (12 tests) covering the command mapping and the refusals
+
+## Deployment fixes (Pterodactyl crash)
+- [x] `engines: { node: ">=22" }` and a fail-fast startup check with a readable message — `connect-session-sequelize` 8 requires Node 22, the host was on the `nodejs_20` yolk
+- [x] Clear, actionable error when the `sqlite3` native binding is missing or blocked by npm's allow-scripts policy, instead of a bare exit 1
+- [x] Fixed `rootDir` regression from the restructure — `src/lib/paths.js` resolved the project root one level short, breaking static file serving and the default `data/` location
 
 ## Could NOT be verified here
 - [!] Anything needing a real Epic account: device auth round-trip, live cosmetic equip in-game, real friends/party/match transitions

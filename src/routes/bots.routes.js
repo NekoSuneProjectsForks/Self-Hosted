@@ -94,7 +94,7 @@ export function registerBotRoutes(ctx) {
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
 			const target = String(req.body.target || req.body.friendId || '').trim();
-			return res.status(201).json(await adapter.addFriend(target));
+			return res.status(201).json(await adapter.addFriend(target, req.params.botId));
 		})
 	);
 
@@ -104,7 +104,7 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
-			return res.json(await adapter.removeFriend(req.params.friendId));
+			return res.json(await adapter.removeFriend(req.params.friendId, req.params.botId));
 		})
 	);
 
@@ -114,7 +114,7 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
-			return res.json(await adapter.acceptFriend(req.params.friendId));
+			return res.json(await adapter.acceptFriend(req.params.friendId, req.params.botId));
 		})
 	);
 
@@ -124,7 +124,7 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
-			return res.json(await adapter.declineFriend(req.params.friendId));
+			return res.json(await adapter.declineFriend(req.params.friendId, req.params.botId));
 		})
 	);
 
@@ -134,7 +134,7 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
-			return res.json(await adapter.blockUser(req.params.friendId));
+			return res.json(await adapter.blockUser(req.params.friendId, req.params.botId));
 		})
 	);
 
@@ -144,7 +144,7 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
-			return res.json(await adapter.unblockUser(req.params.friendId));
+			return res.json(await adapter.unblockUser(req.params.friendId, req.params.botId));
 		})
 	);
 
@@ -220,18 +220,18 @@ export function registerBotRoutes(ctx) {
 			const adapter = runtime.requireActive(req.user.id);
 			const results = [];
 
-			if (req.body.privacy !== undefined) results.push(await adapter.setPrivacy(req.body.privacy));
-			if (req.body.playlist !== undefined) results.push(await adapter.setPlaylist(req.body.playlist));
-			if (req.body.squadFill !== undefined) results.push(await adapter.setSquadFill(req.body.squadFill));
-			if (req.body.ready !== undefined) results.push(await adapter.setReadiness(req.body.ready));
-			if (req.body.sittingOut !== undefined) results.push(await adapter.setSittingOut(req.body.sittingOut));
-			if (req.body.hideMembers !== undefined) results.push(await adapter.hideMembers(req.body.hideMembers));
-			if (req.body.status !== undefined) results.push(await adapter.setStatus(req.body.status));
-			if (req.body.invite !== undefined) results.push(await adapter.inviteUser(req.body.invite));
-			if (req.body.kick !== undefined) results.push(await adapter.kickMember(req.body.kick));
-			if (req.body.promote !== undefined) results.push(await adapter.promoteMember(req.body.promote));
-			if (req.body.join !== undefined) results.push(await adapter.joinParty(req.body.join));
-			if (req.body.leave) results.push(await adapter.leaveParty());
+			if (req.body.privacy !== undefined) results.push(await adapter.setPrivacy(req.body.privacy, req.params.botId));
+			if (req.body.playlist !== undefined) results.push(await adapter.setPlaylist(req.body.playlist, req.params.botId));
+			if (req.body.squadFill !== undefined) results.push(await adapter.setSquadFill(req.body.squadFill, req.params.botId));
+			if (req.body.ready !== undefined) results.push(await adapter.setReadiness(req.body.ready, req.params.botId));
+			if (req.body.sittingOut !== undefined) results.push(await adapter.setSittingOut(req.body.sittingOut, req.params.botId));
+			if (req.body.hideMembers !== undefined) results.push(await adapter.hideMembers(req.body.hideMembers, req.params.botId));
+			if (req.body.status !== undefined) results.push(await adapter.setStatus(req.body.status, req.params.botId));
+			if (req.body.invite !== undefined) results.push(await adapter.inviteUser(req.body.invite, req.params.botId));
+			if (req.body.kick !== undefined) results.push(await adapter.kickMember(req.body.kick, req.params.botId));
+			if (req.body.promote !== undefined) results.push(await adapter.promoteMember(req.body.promote, req.params.botId));
+			if (req.body.join !== undefined) results.push(await adapter.joinParty(req.body.join, req.params.botId));
+			if (req.body.leave) results.push(await adapter.leaveParty(req.params.botId));
 
 			if (!results.length) throw httpError(400, 'No supported party update was provided.');
 			return res.json({ ok: true, results, party: await adapter.getParty(req.params.botId) });
@@ -244,7 +244,7 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
-			if (req.body.clearEmote) return res.json(await adapter.clearEmote());
+			if (req.body.clearEmote) return res.json(await adapter.clearEmote(req.params.botId));
 
 			const slot = String(req.body.slot || '').trim();
 			const itemId = String(req.body.itemId || '').trim();

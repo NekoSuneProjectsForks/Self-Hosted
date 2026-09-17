@@ -109,7 +109,7 @@ const OFFLINE_CAPABILITIES = {
 		capabilities: {
 			friends: true,
 			friendMessages: false,
-			friendRequests: false,
+			friendRequests: true,
 			blockedUsers: true,
 			party: true,
 			partyChat: true,
@@ -118,6 +118,8 @@ const OFFLINE_CAPABILITIES = {
 			playlist: true,
 			privacy: false,
 			readiness: true,
+			sittingOut: false,
+			squadFill: false,
 			presence: true,
 			matchTracking: false,
 			searchUsers: true,

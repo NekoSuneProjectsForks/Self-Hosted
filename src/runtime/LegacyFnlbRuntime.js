@@ -66,7 +66,9 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 				// FNLB exposes friend lists but the dashboard has no verified
 				// endpoint for sending a direct message through it.
 				friendMessages: false,
-				friendRequests: false,
+				// Accept/decline ride on Epic's add/remove friend semantics via
+				// FNLB's existing add_friend / remove_friend commands.
+				friendRequests: true,
 				blockedUsers: true,
 				party: true,
 				partyChat: true,
@@ -78,6 +80,8 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 				playlist: true,
 				privacy: false,
 				readiness: true,
+				sittingOut: false,
+				squadFill: false,
 				presence: true,
 				matchTracking: false,
 				searchUsers: true,
@@ -161,13 +165,105 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 		throw this.unsupported('direct friend messages');
 	}
 
-	async acceptFriend() {
-		throw this.unsupported('accepting friend requests');
+	// ---- friends --------------------------------------------------------
+	//
+	// Epic exposes friendships through a single endpoint pair, which FNLB's
+	// `add_friend` / `remove_friend` commands sit on top of:
+	//
+	//   POST   /friends/{self}/friends/{id}  -> send a request, OR accept an
+	//                                           incoming one
+	//   DELETE /friends/{self}/friends/{id}  -> remove a friend, OR decline an
+	//                                           incoming request, OR cancel an
+	//                                           outgoing one
+	//
+	// So accepting is `add_friend` and declining/cancelling is `remove_friend`.
+	// Both commands are already in FNLB_COMMANDS; no command name is invented.
+
+	async addFriend(target, botId) {
+		await this.runCommand('add_friend', target, botId);
+		return { content: 'Friend request sent.', format: 1, source: 'fnlb' };
 	}
 
-	async declineFriend() {
-		throw this.unsupported('declining friend requests');
+	async acceptFriend(friendId, botId) {
+		await this.runCommand('add_friend', friendId, botId);
+		return { content: 'Friend request accepted.', format: 1, source: 'fnlb' };
 	}
+
+	async declineFriend(friendId, botId) {
+		await this.runCommand('remove_friend', friendId, botId);
+		return {
+			content: 'Friend request declined or cancelled.',
+			format: 1,
+			source: 'fnlb'
+		};
+	}
+
+	async removeFriend(friendId, botId) {
+		await this.runCommand('remove_friend', friendId, botId);
+		return { content: 'Friend removed.', format: 1, source: 'fnlb' };
+	}
+
+	async blockUser(target, botId) {
+		await this.runCommand('block_user', target, botId);
+		return { content: 'User blocked.', format: 1, source: 'fnlb' };
+	}
+
+	async unblockUser(target, botId) {
+		await this.runCommand('unblock_user', target, botId);
+		return { content: 'User unblocked.', format: 1, source: 'fnlb' };
+	}
+
+	// ---- party ----------------------------------------------------------
+
+	async inviteUser(target, botId) {
+		await this.runCommand('invite', target, botId);
+		return { content: 'Party invite sent.', format: 1, source: 'fnlb' };
+	}
+
+	async joinParty(target, botId) {
+		await this.runCommand('join_party', target, botId);
+		return { content: 'Joined party.', format: 1, source: 'fnlb' };
+	}
+
+	async leaveParty(botId) {
+		await this.runCommand('leave_lobby', '', botId);
+		return { content: 'Left the party.', format: 1, source: 'fnlb' };
+	}
+
+	async kickMember(target, botId) {
+		await this.runCommand('kick', target, botId);
+		return { content: 'Party member kicked.', format: 1, source: 'fnlb' };
+	}
+
+	async setStatus(status, botId) {
+		await this.runCommand('set_status', status, botId);
+		return { content: 'Presence status updated.', format: 1, source: 'fnlb' };
+	}
+
+	async setPlaylist(mnemonic, botId) {
+		await this.runCommand('set_playlist', mnemonic, botId);
+		return { content: 'Playlist updated.', format: 1, source: 'fnlb' };
+	}
+
+	async setReadiness(ready, botId) {
+		await this.runCommand(ready ? 'ready' : 'unready', '', botId);
+		return {
+			content: ready ? 'Bot marked ready.' : 'Bot marked not ready.',
+			format: 1,
+			source: 'fnlb'
+		};
+	}
+
+	async hideMembers(hide, botId) {
+		await this.runCommand(hide ? 'hide_all' : 'unhide_all', '', botId);
+		return {
+			content: hide ? 'Party members hidden.' : 'Party members unhidden.',
+			format: 1,
+			source: 'fnlb'
+		};
+	}
+
+	// ---- genuinely unsupported by the FNLB command set ------------------
 
 	async setPrivacy() {
 		throw this.unsupported('party privacy');
@@ -177,6 +273,14 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 		throw this.unsupported('promoting members');
 	}
 
+	async setSittingOut() {
+		throw this.unsupported('sitting out');
+	}
+
+	async setSquadFill() {
+		throw this.unsupported('squad fill');
+	}
+
 	/**
 	 * Persists the cosmetic to the FNLB category. It does NOT claim the running
 	 * bot changed: `appliedLive` is false so the UI can say "applies on reload"
@@ -184,6 +288,14 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 	 */
 	async setCosmetic(slot, itemId, { categoryId, category, nextConfig } = {}) {
 		if (!categoryId) throw runtimeError(400, 'An FNLB category is required to save a cosmetic.');
+		// Without the caller-built config this would PATCH the category with an
+		// undefined config and wipe the saved loadout, so refuse instead.
+		if (!nextConfig || typeof nextConfig !== 'object') {
+			throw runtimeError(
+				400,
+				'FNLB cosmetics must be saved through the category endpoint so the existing loadout is preserved. Use PATCH /api/fnlb/categories/:categoryId/cosmetics.'
+			);
+		}
 		const result = await updateFnlbCategory(this.requireToken(), categoryId, {
 			name: category?.name,
 			config: nextConfig

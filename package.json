@@ -8,6 +8,9 @@
 	"homepage": "",
 	"description": "Self-hosted Fortnite lobby bot dashboard with a local fnbr.js runtime and optional legacy FNLB support.",
 	"license": "ISC",
+	"engines": {
+		"node": ">=22"
+	},
 	"scripts": {
 		"build:css": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify",
 		"start": "npm run build:css && node index.js",

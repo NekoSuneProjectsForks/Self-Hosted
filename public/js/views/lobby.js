@@ -155,13 +155,17 @@ function renderLobbyControls(isLeader) {
 				${can('readiness') ? `
 					<button class="btn-secondary" data-action="party-ready">${icon('check')} Ready</button>
 					<button class="btn-secondary" data-action="party-unready">${icon('x')} Unready</button>
+				` : ''}
+				${can('sittingOut') ? `
 					<button class="btn-secondary" data-action="party-sit-out">${icon('armchair')} Sit Out</button>
 					<button class="btn-secondary" data-action="party-stop-sitting-out">${icon('play')} Stop Sitting Out</button>
 				` : ''}
 				<button class="btn-secondary" data-action="party-hide" ${isLeader ? '' : 'disabled'}>${icon('eye-off')} Hide Members</button>
 				<button class="btn-secondary" data-action="party-unhide" ${isLeader ? '' : 'disabled'}>${icon('eye')} Unhide</button>
-				<button class="btn-secondary" data-action="party-fill" ${isLeader ? '' : 'disabled'}>${icon('users')} Fill</button>
-				<button class="btn-secondary" data-action="party-no-fill" ${isLeader ? '' : 'disabled'}>${icon('user-x')} No Fill</button>
+				${can('squadFill') ? `
+					<button class="btn-secondary" data-action="party-fill" ${isLeader ? '' : 'disabled'}>${icon('users')} Fill</button>
+					<button class="btn-secondary" data-action="party-no-fill" ${isLeader ? '' : 'disabled'}>${icon('user-x')} No Fill</button>
+				` : ''}
 				<button class="btn-danger" data-action="party-leave">${icon('log-out')} Leave Party</button>
 			</div>
 

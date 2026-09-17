@@ -96,10 +96,14 @@ function detailPanel() {
 
 	const actions = [];
 	if (kind === 'incoming') {
-		actions.push(`<button class="btn-primary" data-action="friend-accept" data-friend-id="${id}">${icon('check')} Accept</button>`);
-		actions.push(`<button class="btn-secondary" data-action="friend-decline" data-friend-id="${id}">${icon('x')} Decline</button>`);
+		if (can('friendRequests')) {
+			actions.push(`<button class="btn-primary" data-action="friend-accept" data-friend-id="${id}">${icon('check')} Accept</button>`);
+			actions.push(`<button class="btn-secondary" data-action="friend-decline" data-friend-id="${id}">${icon('x')} Decline</button>`);
+		} else {
+			actions.push(`<p class="text-xs text-zinc-500">This engine cannot accept or decline requests from the dashboard.</p>`);
+		}
 	}
-	if (kind === 'outgoing') {
+	if (kind === 'outgoing' && can('friendRequests')) {
 		actions.push(`<button class="btn-secondary" data-action="friend-decline" data-friend-id="${id}">${icon('x')} Cancel Request</button>`);
 	}
 	if (kind === 'online' || kind === 'offline') {
