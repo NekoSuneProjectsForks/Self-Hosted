@@ -1,5 +1,5 @@
-import { BotConfig } from './models.js';
-import { decryptText, encryptText, maskSecret } from './secrets.js';
+import { BotConfig } from '../models/index.js';
+import { decryptText, encryptText, maskSecret } from '../lib/secrets.js';
 
 export const DEFAULT_LOCAL_CATEGORY_ID = 'local-default';
 
@@ -35,6 +35,7 @@ const DEFAULT_CONFIG = {
 	defaultStatus: 'Battle Royale Lobby - 1 / 16',
 	platform: 'WIN',
 	killOtherTokens: false,
+	localBotEnabled: true,
 	numberOfShards: 2,
 	botsPerShard: 32,
 	restartInterval: 3600,
@@ -160,6 +161,7 @@ export async function getPlainConfig(userId) {
 		defaultStatus: decryptText(row.defaultStatusEncrypted) || DEFAULT_CONFIG.defaultStatus,
 		platform: normalizePlatform(row.platform),
 		killOtherTokens: row.killOtherTokens,
+		localBotEnabled: row.localBotEnabled !== false,
 		numberOfShards: row.numberOfShards,
 		botsPerShard: row.botsPerShard,
 		restartInterval: row.restartInterval,
@@ -210,6 +212,8 @@ export async function upsertPlainConfig(userId, payload) {
 		defaultStatus: cleanText(payload.defaultStatus, current.defaultStatus || DEFAULT_CONFIG.defaultStatus),
 		platform: normalizePlatform(payload.platform, current.platform),
 		killOtherTokens: Boolean(payload.killOtherTokens),
+		localBotEnabled:
+			payload.localBotEnabled === undefined ? current.localBotEnabled !== false : Boolean(payload.localBotEnabled),
 		numberOfShards: toInteger(payload.numberOfShards, current.numberOfShards, 1, 64),
 		botsPerShard: toInteger(payload.botsPerShard, current.botsPerShard, 1, 256),
 		restartInterval: toInteger(payload.restartInterval, current.restartInterval, 60, 604800),
@@ -217,7 +221,16 @@ export async function upsertPlainConfig(userId, payload) {
 		hideEmails: Boolean(payload.hideEmails),
 		autoUpdateOnRestart: Boolean(payload.autoUpdateOnRestart),
 		logLevel: payload.logLevel === 'DEBUG' ? 'DEBUG' : 'INFO',
-		localCategory: normalizeLocalCategory(current.localCategory)
+		// Lobby settings (privacy, auto-accept, loadout) are merged in here so they
+		// can be saved without touching anything that needs a restart.
+		localCategory: normalizeLocalCategory({
+			...current.localCategory,
+			...(payload.localCategory || {}),
+			config: {
+				...(current.localCategory?.config || {}),
+				...(payload.localCategory?.config || {})
+			}
+		})
 	};
 
 	const values = {
@@ -232,6 +245,7 @@ export async function upsertPlainConfig(userId, payload) {
 		localCategoryEncrypted: encryptText(JSON.stringify(next.localCategory)),
 		platform: next.platform,
 		killOtherTokens: next.killOtherTokens,
+		localBotEnabled: next.localBotEnabled,
 		numberOfShards: next.numberOfShards,
 		botsPerShard: next.botsPerShard,
 		restartInterval: next.restartInterval,
@@ -332,4 +346,25 @@ export function validateStartConfig(config) {
 		killOtherTokens: Boolean(config.killOtherTokens),
 		localCategory: normalizeLocalCategory(config.localCategory)
 	};
+}
+
+export async function setLocalBotEnabled(userId, enabled) {
+	const row = await BotConfig.findOne({ where: { userId } });
+	const values = { userId, localBotEnabled: Boolean(enabled) };
+	if (row) await row.update(values);
+	else await BotConfig.create(values);
+	return Boolean(enabled);
+}
+
+/**
+ * "Clear Device Auth" / "Reauthenticate". Removes the stored Epic credentials so
+ * the next start requires a fresh one-time authorization code. Secrets are never
+ * returned to the caller.
+ */
+export async function clearDeviceAuthForUser(userId) {
+	const row = await BotConfig.findOne({ where: { userId } });
+	const values = { userId, deviceAuthEncrypted: null, authorizationCodeEncrypted: null };
+	if (row) await row.update(values);
+	else await BotConfig.create(values);
+	return { deviceAuthConfigured: false, authorizationCodeConfigured: false };
 }

@@ -1,4 +1,4 @@
-import { BotSession, ReplayUpload, SessionMedia, SessionStat } from './models.js';
+import { BotSession, MatchRound, ReplayUpload, SessionMedia, SessionStat } from '../models/index.js';
 
 function snapshotFromBot(bot) {
 	const partyMembers = Array.isArray(bot.party?.members) ? bot.party.members.length : bot.partyMembers;
@@ -50,7 +50,8 @@ export async function getBotSessions(userId, botId, limit = 30) {
 		include: [
 			{ model: ReplayUpload, required: false },
 			{ model: SessionStat, required: false },
-			{ model: SessionMedia, required: false }
+			{ model: SessionMedia, required: false },
+			{ model: MatchRound, required: false, separate: true, order: [['startedAt', 'DESC']] }
 		]
 	});
 
@@ -93,4 +94,30 @@ export function sessionTotals(session) {
 		}),
 		{ kills: Number(session.kills) || 0, deaths: Number(session.deaths) || 0, assists: 0, matches: 0, wins: 0 }
 	);
+}
+
+/**
+ * Closes every still-open session for a user. Called on stop, restart and
+ * shutdown so sessions are not left `isActive: true` forever.
+ */
+export async function closeActiveSessions(userId, botId = null) {
+	const where = { userId, isActive: true };
+	if (botId) where.botId = botId;
+
+	const sessions = await BotSession.findAll({ where });
+	const now = new Date();
+	for (const session of sessions) {
+		await session.update({ isActive: false, endedAt: now, lastSeenAt: now });
+	}
+	return sessions.length;
+}
+
+/** Closes sessions left active by an unclean shutdown, at boot. */
+export async function closeOrphanedSessions() {
+	const sessions = await BotSession.findAll({ where: { isActive: true } });
+	const now = new Date();
+	for (const session of sessions) {
+		await session.update({ isActive: false, endedAt: session.lastSeenAt || now });
+	}
+	return sessions.length;
 }
