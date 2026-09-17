@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
 import { escapeHtml, icon } from '../core/ui.js';
+import { usingLocalFnbr } from '../core/selectors.js';
 
 export function renderItems() {
 	const categoryOptions = state.categories

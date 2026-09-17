@@ -143,6 +143,109 @@ document.addEventListener('click', async (event) => {
 			await loadMe();
 			setToast('Cluster stopped.');
 		}
+		// ---- live friend actions (no restart, act on the running bot) ----
+		if (action === 'refresh-friends') {
+			await loadFriends();
+			return;
+		}
+		if (action === 'refresh-lobby') {
+			await loadParty();
+			return;
+		}
+		if (action === 'refresh-matches') {
+			await loadMatches();
+			return;
+		}
+		if (action === 'friend-open-messages') {
+			state.selectedFriendId = button.dataset.friendId;
+			state.view = 'messages';
+			render();
+			await loadMessages(button.dataset.friendId);
+			return;
+		}
+		if (
+			action === 'friend-accept' ||
+			action === 'friend-decline' ||
+			action === 'friend-remove' ||
+			action === 'friend-block' ||
+			action === 'friend-unblock'
+		) {
+			const friendId = button.dataset.friendId;
+			const botId = activeBotId();
+			const base = `/api/bots/${encodeURIComponent(botId)}/friends/${encodeURIComponent(friendId)}`;
+			const routes = {
+				'friend-accept': ['POST', `${base}/accept`],
+				'friend-decline': ['POST', `${base}/decline`],
+				'friend-remove': ['DELETE', base],
+				'friend-block': ['POST', `${base}/block`],
+				'friend-unblock': ['POST', `${base}/unblock`]
+			};
+			const [method, path] = routes[action];
+			const result = await api(path, { method, body: {} });
+			if (state.selectedFriendId === friendId && action !== 'friend-accept') {
+				state.selectedFriendId = null;
+			}
+			await loadFriends(false);
+			setToast(result?.content || 'Done.');
+			render();
+			return;
+		}
+		if (action === 'friend-invite') {
+			const botId = activeBotId();
+			await api(`/api/bots/${encodeURIComponent(botId)}/party`, {
+				method: 'PATCH',
+				body: { invite: button.dataset.friendId }
+			});
+			setToast('Party invite sent.');
+			return;
+		}
+		if (action === 'friend-join') {
+			const botId = activeBotId();
+			await api(`/api/bots/${encodeURIComponent(botId)}/party`, {
+				method: 'PATCH',
+				body: { join: button.dataset.partyId }
+			});
+			await loadParty(false);
+			setToast('Joined the party.');
+			render();
+			return;
+		}
+
+		// ---- live lobby controls ----
+		const partyActions = {
+			'party-ready': { ready: true },
+			'party-unready': { ready: false },
+			'party-sit-out': { sittingOut: true },
+			'party-stop-sitting-out': { sittingOut: false },
+			'party-hide': { hideMembers: true },
+			'party-unhide': { hideMembers: false },
+			'party-fill': { squadFill: true },
+			'party-no-fill': { squadFill: false },
+			'party-leave': { leave: true }
+		};
+		if (partyActions[action]) {
+			const botId = activeBotId();
+			const result = await api(`/api/bots/${encodeURIComponent(botId)}/party`, {
+				method: 'PATCH',
+				body: partyActions[action]
+			});
+			state.party = result.party || state.party;
+			setToast(result.results?.[0]?.content || 'Lobby updated.');
+			render();
+			return;
+		}
+		if (action === 'party-kick' || action === 'party-promote') {
+			const botId = activeBotId();
+			const key = action === 'party-kick' ? 'kick' : 'promote';
+			const result = await api(`/api/bots/${encodeURIComponent(botId)}/party`, {
+				method: 'PATCH',
+				body: { [key]: button.dataset.memberId }
+			});
+			state.party = result.party || state.party;
+			setToast(result.results?.[0]?.content || 'Lobby updated.');
+			render();
+			return;
+		}
 		if (action === 'restart') {
 			state.busy = true;
 			await api('/api/bot/restart', { method: 'POST', body: {} });
@@ -245,6 +348,69 @@ document.addEventListener('submit', async (event) => {
 
 	try {
 		state.busy = true;
+
+		// ---- live social / lobby forms (none of these need a restart) ----
+		if (form.dataset.form === 'friend-add') {
+			const botId = activeBotId();
+			await api(`/api/bots/${encodeURIComponent(botId)}/friends`, {
+				method: 'POST',
+				body: { target: data.target }
+			});
+			form.reset();
+			await loadFriends(false);
+			setToast('Friend request sent.');
+			render();
+			return;
+		}
+		if (form.dataset.form === 'friend-message') {
+			const botId = activeBotId();
+			const friendId = state.selectedFriendId;
+			if (!friendId) throw new Error('Pick a conversation first.');
+			const result = await api(
+				`/api/bots/${encodeURIComponent(botId)}/friends/${encodeURIComponent(friendId)}/messages`,
+				{ method: 'POST', body: { content: data.content } }
+			);
+			form.reset();
+			// The server echoes the stored message, so the thread updates without a refetch.
+			if (result?.message) {
+				const thread = state.messages[friendId] || [];
+				state.messages = { ...state.messages, [friendId]: [...thread, result.message] };
+			}
+			render();
+			return;
+		}
+		if (form.dataset.form === 'party-message') {
+			const botId = activeBotId();
+			await api(`/api/bots/${encodeURIComponent(botId)}/party/messages`, {
+				method: 'POST',
+				body: { content: data.content }
+			});
+			form.reset();
+			setToast('Lobby message sent.');
+			return;
+		}
+		if (
+			form.dataset.form === 'party-privacy' ||
+			form.dataset.form === 'party-playlist' ||
+			form.dataset.form === 'party-status'
+		) {
+			const botId = activeBotId();
+			const body =
+				form.dataset.form === 'party-privacy'
+					? { privacy: data.privacy }
+					: form.dataset.form === 'party-playlist'
+						? { playlist: data.playlist }
+						: { status: data.status };
+			const result = await api(`/api/bots/${encodeURIComponent(botId)}/party`, {
+				method: 'PATCH',
+				body
+			});
+			state.party = result.party || state.party;
+			setToast(result.results?.[0]?.content || 'Lobby updated.');
+			render();
+			return;
+		}
+
 		if (form.dataset.form === 'login') {
 			const result = await api('/api/auth/login', { method: 'POST', body: data });
 			state.user = result.user;

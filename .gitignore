@@ -1,5 +1,9 @@
 .env
-.fnlb
-data
-node_modules
+
+# Leading slashes anchor these to the project root. Without them, a bare
+# `data/` would also ignore source directories like public/js/data/.
+/.fnlb/
+/data/
+/node_modules/
+
 TODONEEDFIXES.md

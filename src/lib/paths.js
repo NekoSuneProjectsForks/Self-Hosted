@@ -2,7 +2,8 @@ import { mkdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// This file lives at src/lib/, so the project root is two levels up.
+export const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const publicDir = join(rootDir, 'public');
 export const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(rootDir, 'data');
 export const fnlbDataDir = join(dataDir, 'fnlb');

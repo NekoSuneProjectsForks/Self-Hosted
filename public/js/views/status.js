@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 import { count, detailRow, escapeHtml, formatDate, icon, renderList, smallCount, statCard, statusBadge, valueOrDash } from '../core/ui.js';
-import { usingLocalFnbr } from '../core/selectors.js';
+import { dashboardAvailable, usingLocalFnbr } from '../core/selectors.js';
 
 export function renderMetricCards() {
 	const config = state.config || {};

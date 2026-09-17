@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { escapeHtml, icon } from '../core/ui.js';
+import { escapeHtml, icon, renderToast } from '../core/ui.js';
 
 export function renderAuthForm() {
 	const mode = state.authMode;
