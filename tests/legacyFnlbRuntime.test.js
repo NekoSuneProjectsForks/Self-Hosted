@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it, beforeEach } from 'node:test';
 import { LegacyFnlbRuntime } from '../src/runtime/LegacyFnlbRuntime.js';
+import { validateStartConfig } from '../src/services/configStore.js';
 
 /**
  * The adapter is exercised with `runCommand` stubbed, so no FNLB token, network
@@ -150,5 +151,40 @@ describe('LegacyFnlbRuntime cosmetics safety', () => {
 			() => runtime.setCosmetic('outfit', 'CID_1', {}),
 			(error) => error.status === 400
 		);
+	});
+});
+
+describe('LegacyFnlbRuntime start options', () => {
+	it('maps the release channel and bot filter onto fnlb options', () => {
+		const runtime = makeRuntime();
+		runtime.startConfig = validateStartConfig({
+			runtimeMode: 'fnlb',
+			apiToken: 'token-1234567890',
+			releaseChannel: 'beta',
+			categories: ' cat-1 , ,cat-2 ',
+			bots: 'bot-1',
+			numberOfShards: 2,
+			botsPerShard: 32
+		});
+		const options = runtime.fnlbStartOptions();
+		assert.equal(options.channel, 'beta');
+		assert.deepEqual(options.categories, ['cat-1', 'cat-2']);
+		assert.deepEqual(options.bots, ['bot-1']);
+		assert.equal(options.mode, undefined);
+		assert.equal(options.releaseChannel, undefined);
+	});
+
+	it('starts without filters and defaults to the stable channel', () => {
+		const runtime = makeRuntime();
+		runtime.startConfig = validateStartConfig({
+			runtimeMode: 'fnlb',
+			apiToken: 'token-1234567890',
+			categories: '',
+			bots: ''
+		});
+		const options = runtime.fnlbStartOptions();
+		assert.equal(options.channel, 'stable');
+		assert.equal(options.categories, undefined);
+		assert.equal(options.bots, undefined);
 	});
 });

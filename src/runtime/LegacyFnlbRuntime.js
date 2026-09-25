@@ -113,7 +113,19 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 		});
 
 		this.log(`Starting legacy FNLB cluster ${this.plainConfig.clusterName}...`, 2);
-		await this.manager.start(this.startConfig);
+		await this.manager.start(this.fnlbStartOptions());
+	}
+
+	/** Maps the saved start config onto fnlb's StartConfig shape. */
+	fnlbStartOptions() {
+		const { mode, releaseChannel, categories, bots, ...rest } = this.startConfig;
+		return {
+			...rest,
+			channel: releaseChannel === 'beta' ? 'beta' : 'stable',
+			// fnlb treats an omitted filter as "include everything".
+			categories: categories?.length ? categories : undefined,
+			bots: bots?.length ? bots : undefined
+		};
 	}
 
 	async stop() {

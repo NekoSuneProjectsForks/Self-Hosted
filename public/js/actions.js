@@ -448,6 +448,8 @@ document.addEventListener('submit', async (event) => {
 				deviceAuthDeviceId: data.deviceAuthDeviceId || '',
 				deviceAuthSecret: data.deviceAuthSecret || '',
 				categories: data.categories,
+				bots: data.bots,
+				releaseChannel: data.releaseChannel,
 				clusterName: data.clusterName,
 				defaultStatus: data.defaultStatus,
 				platform: data.platform,

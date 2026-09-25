@@ -18,6 +18,12 @@ export function renderConfig() {
 					<label class="md:col-span-2">
 						<span class="label">One-time Epic Authorization Code</span>
 						<input class="input" name="authorizationCode" type="password" autocomplete="off" placeholder="${config.authorizationCodeConfigured ? 'Saved authorization code pending use' : 'Paste 32 character code from Epic login redirect'}" />
+						${config.deviceAuthConfigured ? '' : `
+							<span class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+								<a class="btn-secondary" href="https://www.epicgames.com/id/api/redirect?clientId=3f69e56c7649492c8cc29f1af08a8a12&responseType=code" target="_blank" rel="noopener noreferrer">${icon('external-link')} Get code from Epic</a>
+								Sign in as the bot account, then copy the <code>authorizationCode</code> value and paste it here. It works once and expires in a few minutes.
+							</span>
+						`}
 					</label>
 					<label>
 						<span class="label">Device Auth Account ID</span>
@@ -45,9 +51,20 @@ export function renderConfig() {
 						<span class="label">Legacy FNLB API Token</span>
 						<input class="input" name="apiToken" type="password" autocomplete="off" placeholder="${config.apiTokenConfigured ? `Saved: ${escapeHtml(config.apiTokenMasked)}` : 'API token'}" />
 					</label>
+					<label>
+						<span class="label">Legacy FNLB Release Channel</span>
+						<select class="input" name="releaseChannel">
+							<option value="stable" ${config.releaseChannel !== 'beta' ? 'selected' : ''}>Stable (recommended)</option>
+							<option value="beta" ${config.releaseChannel === 'beta' ? 'selected' : ''}>Beta</option>
+						</select>
+					</label>
 					<label class="md:col-span-2">
-						<span class="label">Legacy FNLB Categories</span>
-						<input class="input" name="categories" value="${escapeHtml(config.categories || '')}" placeholder="123456789,987654321" />
+						<span class="label">Legacy FNLB Categories (optional)</span>
+						<input class="input" name="categories" value="${escapeHtml(config.categories || '')}" placeholder="Leave empty for all categories, or 123456789,987654321" />
+					</label>
+					<label class="md:col-span-2">
+						<span class="label">Legacy FNLB Bots (optional)</span>
+						<input class="input" name="bots" value="${escapeHtml(config.bots || '')}" placeholder="Leave empty for all bots, or botId1,botId2" />
 					</label>
 					<label class="md:col-span-2">
 						<span class="label">Cluster Name</span>

@@ -20,6 +20,8 @@ const RESTART_REQUIRED_KEYS = [
 	'runtimeMode',
 	'apiToken',
 	'categories',
+	'bots',
+	'releaseChannel',
 	'platform',
 	'killOtherTokens',
 	'numberOfShards',

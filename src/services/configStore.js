@@ -31,6 +31,8 @@ const DEFAULT_CONFIG = {
 	deviceAuth: null,
 	authorizationCode: '',
 	categories: '',
+	bots: '',
+	releaseChannel: 'stable',
 	clusterName: 'Local fnbr Cluster',
 	defaultStatus: 'Battle Royale Lobby - 1 / 16',
 	platform: 'WIN',
@@ -89,6 +91,11 @@ function normalizeRuntimeMode(value) {
 	return value === 'fnlb' ? 'fnlb' : 'fnbr';
 }
 
+// `dev` exists in the fnlb package but is internal; only expose stable/beta.
+function normalizeReleaseChannel(value) {
+	return value === 'beta' ? 'beta' : 'stable';
+}
+
 function normalizePlatform(value, fallback = DEFAULT_CONFIG.platform) {
 	const platform = cleanText(value, fallback).toUpperCase();
 	return SUPPORTED_PLATFORMS.has(platform) ? platform : fallback;
@@ -140,12 +147,14 @@ function normalizeLocalCategory(value) {
 	return next;
 }
 
-export function parseCategories(value) {
+export function parseIdList(value) {
 	return cleanText(value)
 		.split(',')
-		.map((category) => category.trim())
+		.map((id) => id.trim())
 		.filter(Boolean);
 }
+
+export const parseCategories = parseIdList;
 
 export async function getPlainConfig(userId) {
 	const row = await BotConfig.findOne({ where: { userId } });
@@ -157,6 +166,8 @@ export async function getPlainConfig(userId) {
 		deviceAuth: parseJson(row.deviceAuthEncrypted, null),
 		authorizationCode: decryptText(row.authorizationCodeEncrypted),
 		categories: decryptText(row.categoriesEncrypted),
+		bots: decryptText(row.botsEncrypted),
+		releaseChannel: normalizeReleaseChannel(row.releaseChannel),
 		clusterName: decryptText(row.clusterNameEncrypted) || DEFAULT_CONFIG.clusterName,
 		defaultStatus: decryptText(row.defaultStatusEncrypted) || DEFAULT_CONFIG.defaultStatus,
 		platform: normalizePlatform(row.platform),
@@ -208,6 +219,8 @@ export async function upsertPlainConfig(userId, payload) {
 				? current.authorizationCode
 				: cleanText(payload.authorizationCode),
 		categories: cleanText(payload.categories, current.categories),
+		bots: cleanText(payload.bots, current.bots),
+		releaseChannel: normalizeReleaseChannel(payload.releaseChannel ?? current.releaseChannel),
 		clusterName: cleanText(payload.clusterName, current.clusterName || DEFAULT_CONFIG.clusterName),
 		defaultStatus: cleanText(payload.defaultStatus, current.defaultStatus || DEFAULT_CONFIG.defaultStatus),
 		platform: normalizePlatform(payload.platform, current.platform),
@@ -240,6 +253,8 @@ export async function upsertPlainConfig(userId, payload) {
 		deviceAuthEncrypted: encryptText(deviceAuth ? JSON.stringify(deviceAuth) : ''),
 		authorizationCodeEncrypted: encryptText(next.authorizationCode),
 		categoriesEncrypted: encryptText(next.categories),
+		botsEncrypted: encryptText(next.bots),
+		releaseChannel: next.releaseChannel,
 		clusterNameEncrypted: encryptText(next.clusterName),
 		defaultStatusEncrypted: encryptText(next.defaultStatus),
 		localCategoryEncrypted: encryptText(JSON.stringify(next.localCategory)),
@@ -309,17 +324,13 @@ export function validateStartConfig(config) {
 			throw error;
 		}
 
-		const categories = parseCategories(config.categories);
-		if (!categories.length) {
-			const error = new Error('Add at least one FNLB category ID before starting the legacy FNLB cluster.');
-			error.status = 400;
-			throw error;
-		}
-
+		// Both filters are optional: an empty list means "all categories / all bots".
 		return {
 			mode: 'fnlb',
 			apiToken: config.apiToken,
-			categories,
+			releaseChannel: normalizeReleaseChannel(config.releaseChannel),
+			categories: parseIdList(config.categories),
+			bots: parseIdList(config.bots),
 			numberOfShards: config.numberOfShards,
 			botsPerShard: config.botsPerShard,
 			hideUsernames: config.hideUsernames,

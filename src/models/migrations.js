@@ -70,4 +70,17 @@ export async function ensureBotConfigColumns() {
 			defaultValue: true
 		});
 	}
+	if (!table.botsEncrypted) {
+		await queryInterface.addColumn('BotConfigs', 'botsEncrypted', {
+			type: DataTypes.TEXT,
+			allowNull: true
+		});
+	}
+	if (!table.releaseChannel) {
+		await queryInterface.addColumn('BotConfigs', 'releaseChannel', {
+			type: DataTypes.STRING(16),
+			allowNull: false,
+			defaultValue: 'stable'
+		});
+	}
 }

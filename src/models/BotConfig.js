@@ -31,6 +31,10 @@ BotConfig.init(
 			type: DataTypes.TEXT,
 			allowNull: true
 		},
+		botsEncrypted: {
+			type: DataTypes.TEXT,
+			allowNull: true
+		},
 		clusterNameEncrypted: {
 			type: DataTypes.TEXT,
 			allowNull: true
@@ -47,6 +51,11 @@ BotConfig.init(
 			type: DataTypes.STRING(16),
 			allowNull: false,
 			defaultValue: 'fnbr'
+		},
+		releaseChannel: {
+			type: DataTypes.STRING(16),
+			allowNull: false,
+			defaultValue: 'stable'
 		},
 		platform: {
 			type: DataTypes.STRING(16),

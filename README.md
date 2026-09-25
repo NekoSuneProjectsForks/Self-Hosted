@@ -92,6 +92,9 @@ The dashboard uses WebSockets, so the proxy must forward `Upgrade` and
 
 ## Epic authentication (local fnbr mode)
 
+Step-by-step walkthrough, from getting the code to getting the bot into your
+lobby: **[docs/fnbr-setup.md](docs/fnbr-setup.md)**.
+
 Epic account login uses **device auth**. Email/password is not used, because
 Epic normally requires a captcha for it.
 
@@ -209,7 +212,8 @@ underneath you. It sets `restartRequired` and shows
 Restart button. API routes always talk to the engine that is really running.
 
 Lobby settings (cosmetics, privacy, presence status, auto-accept) apply live.
-Only process-level settings (engine, platform, API token, categories, shards,
+Only process-level settings (engine, platform, API token, release channel,
+category and bot filters, shards,
 cluster name, log level) require a restart.
 
 ---
