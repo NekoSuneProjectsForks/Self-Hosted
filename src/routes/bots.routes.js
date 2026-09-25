@@ -76,12 +76,14 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id);
+			// The fnbr adapter answers these synchronously and the FNLB one returns
+			// promises; Promise.resolve().then() normalizes both, and also catches
+			// a synchronous throw, so an optional list can never fail the request.
+			const optional = (read, fallback) => Promise.resolve().then(read).catch(() => fallback);
 			const [friends, pendingFriends, blocked] = await Promise.all([
 				adapter.getFriends(req.params.botId),
-				adapter
-					.getPendingFriends(req.params.botId)
-					.catch(() => ({ incomingFriends: [], outgoingFriends: [] })),
-				adapter.getBlockedUsers(req.params.botId).catch(() => [])
+				optional(() => adapter.getPendingFriends(req.params.botId), { incomingFriends: [], outgoingFriends: [] }),
+				optional(() => adapter.getBlockedUsers(req.params.botId), [])
 			]);
 			return res.json({ ...friends, pendingFriends, blockedUsers: blocked });
 		})
@@ -176,6 +178,19 @@ export function registerBotRoutes(ctx) {
 			if (content.length > 2000) throw httpError(400, 'Message is too long.');
 			const adapter = runtime.requireActive(req.user.id);
 			return res.status(201).json(await adapter.sendFriendMessage(req.params.friendId, content));
+		})
+	);
+
+	// Diagnostic: bot presence vs. a friend's real client presence. Open it
+	// while that friend is in Fortnite, e.g. ?friend=DisplayName.
+	app.get(
+		'/api/bots/:botId/presence-compare',
+		requireAuth,
+		requireActive,
+		asyncRoute(async (req, res) => {
+			const adapter = runtime.requireActive(req.user.id);
+			const friend = String(req.query.friend || '').trim();
+			return res.json(await adapter.comparePresence(friend || null));
 		})
 	);
 

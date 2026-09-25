@@ -76,6 +76,10 @@ export class BaseRuntime {
 		throw this.unsupported('blocked users');
 	}
 
+	async comparePresence() {
+		throw this.unsupported('presence diagnostics');
+	}
+
 	async getParty() {
 		throw this.unsupported('party state');
 	}

@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { BaseRuntime, runtimeError } from './BaseRuntime.js';
+import { PresenceProbe } from './presenceProbe.js';
 
 const require = createRequire(import.meta.url);
 const { Client, Enums } = require('fnbr');
@@ -230,6 +231,8 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		});
 
 		this.client = client;
+		this.presenceProbe = new PresenceProbe();
+		this.presenceProbe.install(client);
 		this.bindEvents(client);
 
 		this.log('[Local fnbr] Authenticating with Epic', 2);
@@ -608,6 +611,21 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			else incomingFriends.push(row);
 		}
 		return { incomingFriends, outgoingFriends };
+	}
+
+	/**
+	 * Raw presence the bot last published next to what a friend's real client
+	 * last published, for working out why Fortnite won't offer Invite/Join.
+	 */
+	comparePresence(friendId) {
+		const client = this.requireClient();
+		const target = friendId ? client.friend.resolve(normalizeTarget(friendId, 'a friend')) : null;
+		if (friendId && !target) throw runtimeError(404, 'That user is not a friend of the bot.');
+		return {
+			...this.presenceProbe.compare(target?.id),
+			friendId: target?.id || null,
+			friendName: target?.displayName || null
+		};
 	}
 
 	getBlockedUsers() {

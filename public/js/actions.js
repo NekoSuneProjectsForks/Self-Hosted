@@ -18,6 +18,7 @@ import {
 	loadQuickCommands,
 	loadSession
 } from './data/loaders.js';
+import { showEngineFields } from './views/config.js';
 
 export function pushApiResponse(response) {
 	state.commandResponses.push({
@@ -567,6 +568,8 @@ document.addEventListener('submit', async (event) => {
 document.addEventListener('change', (event) => {
 	const autoRefresh = event.target.closest('[data-action="toggle-auto-refresh"]');
 	if (autoRefresh) state.autoRefresh = autoRefresh.checked;
+	const engineSelect = event.target.closest('[data-action="config-engine"]');
+	if (engineSelect) showEngineFields(engineSelect.form, engineSelect.value);
 });
 
 
