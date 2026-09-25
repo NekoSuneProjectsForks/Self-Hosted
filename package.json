@@ -13,7 +13,7 @@
 		"start:bun": "bun run index.js"
 	},
 	"dependencies": {
-		"fnlb": "latest",
+		"fnlb": "^1.1.21",
 		"dotenv": "^17.0.0"
 	}
 }
