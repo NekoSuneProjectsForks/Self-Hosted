@@ -3,7 +3,7 @@ import { BaseRuntime, runtimeError } from './BaseRuntime.js';
 import { PresenceProbe } from './presenceProbe.js';
 
 const require = createRequire(import.meta.url);
-const { Client, Enums } = require('fnbr');
+const { Client, Enums } = require('@fnlb-project/fnbr');
 
 // Verified against the installed fnbr 4.2.0 typings:
 //   ClientPartyMember: setOutfit/setBackpack/setPickaxe/setShoes/setEmote/clearEmote,
