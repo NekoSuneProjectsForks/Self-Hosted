@@ -386,6 +386,21 @@ public Epic stats, with nothing to type in:
 - You can still track a player by name under "Also track a player"
   (up to 10; bots don't count toward that).
 
+- **Click a match** for its full details: who played it (bot or player),
+  mode, playlist ID, input, start and end, length, result and every placement
+  reached, kills, K/D, players outlived, score. If an FNLB bot queued it,
+  you also get the queue time, region, real players in the match and the party
+  (who was in the lobby when it queued).
+- **Export HTML** downloads a standalone report you can share with anyone:
+  totals, a match table (with queue time, real players and party per match)
+  and the bot-lobby queues. Names are shortened to their first 4 letters
+  ("NekoSuneVR" → "Neko****"). It has no account IDs, emails or scripts, and
+  doesn't say which account reads the stats.
+
+Each account is checked one at a time, so overlapping checks (Check now, the
+timer, Admin "check everyone") can't save the same match twice. Duplicates an
+older version saved are removed when the server starts.
+
 Stats are read by the admin's **server tracker** (Admin → Tracker), which never
 joins a party. Members aren't shown which account it is. Epic updates stats a
 few minutes after a match ends, and the first check only records a starting

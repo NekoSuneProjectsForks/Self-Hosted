@@ -8,6 +8,7 @@ import { initDatabase, normalizeSuspension, User } from './models/index.js';
 import { initMailer } from './services/mailer.js';
 import { closeOrphanedSessions } from './services/sessionHistory.js';
 import { closeOrphanedMatchRounds } from './services/matchTracker.js';
+import { removeDuplicateMatches } from './services/playerTracker.js';
 import { mediaDir, publicDir, replayDir, rootDir } from './lib/paths.js';
 import { initSecrets } from './lib/secrets.js';
 import { createSessionMiddleware } from './http/session.js';
@@ -60,6 +61,10 @@ export async function createServer() {
 	// An unclean shutdown leaves sessions and match rounds marked active forever.
 	await closeOrphanedSessions().catch(() => {});
 	await closeOrphanedMatchRounds().catch(() => {});
+	// Clean up matches an older version saved twice (overlapping checks).
+	await removeDuplicateMatches()
+		.then((removed) => removed && console.log(`[Matches] Removed ${removed} duplicate match(es).`))
+		.catch(() => {});
 	if ((await User.count()) === 0) {
 		console.log('[Lobby Bot Dashboard] No accounts exist yet. The first registered account will become admin.');
 	}

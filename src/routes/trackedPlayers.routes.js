@@ -8,6 +8,7 @@ import {
 	trackedMatches
 } from '../services/playerTracker.js';
 import { fnlbQueues } from '../services/fnlbQueues.js';
+import { matchDetails, matchReportHtml } from '../services/matchReport.js';
 
 /**
  * Player match tracking (works with any engine, including Legacy FNLB bot
@@ -46,6 +47,31 @@ export function registerTrackedPlayerRoutes(ctx) {
 		'/api/tracked-players',
 		...guard,
 		asyncRoute(async (req, res) => res.json(await overview(req.user.id, req.query)))
+	);
+
+	/** Full details of one recorded match (owner only; names not masked). */
+	app.get(
+		'/api/tracked-players/matches/:id',
+		...guard,
+		asyncRoute(async (req, res) => {
+			const details = await matchDetails(req.user.id, req.params.id);
+			if (!details) throw httpError(404, 'Match not found.');
+			return res.json(details);
+		})
+	);
+
+	/** Shareable HTML report (download). Names masked, no account IDs. */
+	app.get(
+		'/api/tracked-players/export',
+		...guard,
+		asyncRoute(async (req, res) => {
+			const accountId = String(req.query.bot || '').trim() || null;
+			const html = await matchReportHtml(req.user.id, { accountId });
+			const stamp = new Date().toISOString().slice(0, 10);
+			res.set('Content-Type', 'text/html; charset=utf-8');
+			res.set('Content-Disposition', `attachment; filename="match-report-${stamp}.html"`);
+			return res.send(html);
+		})
 	);
 
 	// Lifetime Epic stats for one tracked account (cached 5 minutes).

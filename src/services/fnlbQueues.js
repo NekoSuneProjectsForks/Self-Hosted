@@ -49,7 +49,7 @@ export async function recordFnlbMatchmaking(userId, event) {
 			startedAt: new Date(),
 			status: 'matchmaking',
 			source: 'fnlb',
-			metadataJson: JSON.stringify({ bot: event.bot, version: event.version || null, outcome: 'queued' })
+			metadataJson: JSON.stringify({ bot: event.bot, version: event.version || null, outcome: 'queued', party: event.party || null })
 		});
 		return round.toJSON();
 	}
@@ -59,7 +59,7 @@ export async function recordFnlbMatchmaking(userId, event) {
 		return open.toJSON();
 	}
 	if (event.type === 'success') {
-		return finish(open, { outcome: 'matched', realPlayers: event.realPlayers });
+		return finish(open, { outcome: 'matched', realPlayers: event.realPlayers, ...(event.party ? { party: event.party } : {}) });
 	}
 	if (event.type === 'failed') {
 		return finish(open, { outcome: 'failed', reason: event.reason || null });
@@ -88,6 +88,7 @@ export async function fnlbQueues(userId, { bot = null, page = 1, pageSize = 10 }
 			realPlayers: info.realPlayers ?? null,
 			region: info.region || null,
 			reason: info.reason ? friendlyMatchmakingError(info.reason) : null,
+			party: Array.isArray(info.party) ? info.party : null,
 			startedAt: json.startedAt,
 			queueSeconds: json.duration
 		};
@@ -108,5 +109,35 @@ export async function fnlbQueues(userId, { bot = null, page = 1, pageSize = 10 }
 			avgQueueSeconds: timed.length ? Math.round(timed.reduce((sum, q) => sum + q.queueSeconds, 0) / timed.length) : null
 		},
 		bots: [...new Set(all.map((q) => q.bot))]
+	};
+}
+
+/**
+ * The FNLB queue that most likely led to a recorded match: same bot, matched,
+ * and queued between 15 minutes before and 5 minutes after the match began.
+ */
+export async function queueForMatch(userId, botName, startedAt) {
+	if (!botName || !startedAt) return null;
+	const start = new Date(startedAt).getTime();
+	const rows = await MatchRound.findAll({
+		where: {
+			userId,
+			source: 'fnlb',
+			botId: `${FNLB_ROUND_PREFIX}${botName}`,
+			startedAt: { [Op.between]: [new Date(start - 15 * 60000), new Date(start + 5 * 60000)] }
+		}
+	});
+	const matched = rows.filter((row) => meta(row.toJSON()).outcome === 'matched');
+	if (!matched.length) return null;
+	matched.sort((a, b) => Math.abs(new Date(a.startedAt).getTime() - start) - Math.abs(new Date(b.startedAt).getTime() - start));
+	const json = matched[0].toJSON();
+	const info = meta(json);
+	return {
+		bot: info.bot || botName,
+		queuedAt: json.startedAt,
+		queueSeconds: json.duration,
+		region: info.region || null,
+		realPlayers: info.realPlayers ?? null,
+		party: Array.isArray(info.party) ? info.party : null
 	};
 }

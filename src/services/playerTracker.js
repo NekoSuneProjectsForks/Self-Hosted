@@ -184,7 +184,25 @@ export async function setTrackedPlayerEnabled(userId, id, enabled) {
  * only stores a baseline (it can't tell which old matches are new).
  * Returns the match rounds it recorded.
  */
+// One check per tracked account at a time. Overlapping checks (Check now,
+// the background timer, Admin "check everyone") used to read the same
+// baseline and record the same match twice.
+const pollLocks = new Map();
+
 export async function pollTrackedPlayer(row, fetchRaw) {
+	const previous = pollLocks.get(row.id) || Promise.resolve();
+	const run = previous.catch(() => {}).then(() => pollTrackedPlayerNow(row, fetchRaw));
+	pollLocks.set(row.id, run);
+	try {
+		return await run;
+	} finally {
+		if (pollLocks.get(row.id) === run) pollLocks.delete(row.id);
+	}
+}
+
+async function pollTrackedPlayerNow(row, fetchRaw) {
+	// Always diff against the latest saved baseline (another check may have moved it).
+	await row.reload().catch(() => {});
 	let raw;
 	try {
 		raw = await fetchRaw(row.accountId);
@@ -206,6 +224,11 @@ export async function pollTrackedPlayer(row, fetchRaw) {
 	const rounds = [];
 	for (const match of finished) {
 		const endedAt = match.endedAt;
+		// Same account + mode + end time = the same match: never save it twice.
+		const exists = await MatchRound.findOne({
+			where: { userId: row.userId, botId: `${TRACKED_ROUND_PREFIX}${row.accountId}`, playlistId: match.playlist, endedAt, source: 'epic' }
+		});
+		if (exists) continue;
 		const duration = match.minutes ? match.minutes * 60 : null;
 		const startedAt = duration ? new Date(endedAt.getTime() - duration * 1000) : endedAt;
 		const round = await MatchRound.create({
@@ -226,6 +249,28 @@ export async function pollTrackedPlayer(row, fetchRaw) {
 	}
 	await row.update({ baselineJson: JSON.stringify(after), lastPolledAt: new Date(), lastError: null });
 	return rounds;
+}
+
+/**
+ * Removes matches that were saved twice by overlapping checks (same account,
+ * mode and end time), keeping the first. Returns how many were removed.
+ */
+export async function removeDuplicateMatches(userId = null) {
+	const where = { source: 'epic' };
+	if (userId) where.userId = userId;
+	const rows = await MatchRound.findAll({ where, order: [['createdAt', 'ASC']] });
+	const seen = new Set();
+	let removed = 0;
+	for (const row of rows) {
+		const key = `${row.userId}|${row.botId}|${row.playlistId}|${new Date(row.endedAt).getTime()}`;
+		if (seen.has(key)) {
+			await row.destroy();
+			removed += 1;
+		} else {
+			seen.add(key);
+		}
+	}
+	return removed;
 }
 
 /** Polls every enabled tracked player of a user. */
@@ -299,16 +344,29 @@ function toMatch(json) {
 	};
 }
 
+/** Every recorded match for one tracked account (or all), newest first (max 2000). */
+export async function allTrackedMatches(userId, accountId = null) {
+	const { Op } = await import('sequelize');
+	const where = { userId, source: 'epic' };
+	where.botId = accountId ? `${TRACKED_ROUND_PREFIX}${accountId}` : { [Op.like]: `${TRACKED_ROUND_PREFIX}%` };
+	const rows = await MatchRound.findAll({ where, order: [['endedAt', 'DESC']], limit: 2000 });
+	return rows.map((row) => toMatch(row.toJSON()));
+}
+
+/** One recorded match with everything saved about it (owner only). */
+export async function trackedMatchById(userId, matchId) {
+	const row = await MatchRound.findOne({ where: { userId, id: matchId, source: 'epic' } });
+	if (!row) return null;
+	const json = row.toJSON();
+	return { ...toMatch(json), meta: parseMeta(json) };
+}
+
 /**
  * Recorded matches for one tracked account (or all), newest first, one page
  * at a time, with totals for today and for everything recorded.
  */
 export async function trackedMatches(userId, accountId = null, { page = 1, pageSize = 20 } = {}) {
-	const { Op } = await import('sequelize');
-	const where = { userId, source: 'epic' };
-	where.botId = accountId ? `${TRACKED_ROUND_PREFIX}${accountId}` : { [Op.like]: `${TRACKED_ROUND_PREFIX}%` };
-	const rows = await MatchRound.findAll({ where, order: [['endedAt', 'DESC']], limit: 2000 });
-	const all = rows.map((row) => toMatch(row.toJSON()));
+	const all = await allTrackedMatches(userId, accountId);
 	const size = Math.min(100, Math.max(5, Number(pageSize) || 20));
 	const pages = Math.max(1, Math.ceil(all.length / size));
 	const current = Math.min(pages, Math.max(1, Number(page) || 1));

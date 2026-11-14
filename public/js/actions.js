@@ -318,6 +318,23 @@ document.addEventListener('click', async (event) => {
 			render();
 			return;
 		}
+		if (action === 'match-open') {
+			const id = button.dataset.matchId;
+			state.matchDetail = { id, loading: true };
+			render();
+			try {
+				state.matchDetail = { id, data: await api(`/api/tracked-players/matches/${encodeURIComponent(id)}`) };
+			} catch (error) {
+				state.matchDetail = { id, error: error.message };
+			}
+			render();
+			return;
+		}
+		if (action === 'match-close' || (action === 'match-close-backdrop' && event.target === button)) {
+			state.matchDetail = null;
+			render();
+			return;
+		}
 		if (action === 'matches-page' || action === 'queues-page') {
 			const page = Math.max(1, Number(button.dataset.page) || 1);
 			state.matchesQuery = { ...(state.matchesQuery || {}), [action === 'matches-page' ? 'page' : 'qpage']: page };
@@ -1376,6 +1393,11 @@ async function handleAdminAction(action, userId, button = null) {
 }
 
 document.addEventListener('keydown', (event) => {
+	if (event.key === 'Escape' && state.matchDetail) {
+		state.matchDetail = null;
+		render();
+		return;
+	}
 	if (event.key === 'Escape' && state.bannerPicker) {
 		state.bannerPicker = null;
 		render();

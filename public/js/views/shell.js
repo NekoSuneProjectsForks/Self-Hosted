@@ -9,7 +9,7 @@ import { renderAdmin } from './admin.js';
 import { renderLobby } from './lobby.js';
 import { renderFriends } from './friends.js';
 import { renderMessages } from './messages.js';
-import { renderMatches } from './matches.js';
+import { renderMatchModal, renderMatches } from './matches.js';
 import { renderBotLobby } from './botlobby.js';
 import { renderConsole } from './console.js';
 import { renderBotModal } from './botmodal.js';
@@ -109,6 +109,7 @@ export function renderShell() {
 		${renderToast()}
 		${renderEpicCodePrompt()}
 		${renderBotModal()}
+		${renderMatchModal()}
 		${renderBannerPicker()}
 		<div class="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
 			<aside class="flex flex-col gap-5 border-b border-white/10 bg-black/30 p-4 backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-b-0 lg:border-r">

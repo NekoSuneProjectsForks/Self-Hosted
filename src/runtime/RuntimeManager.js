@@ -385,8 +385,29 @@ export class RuntimeManager {
 	}
 
 	/** FNLB engine: queue start/result read from FNLB's log (bot-lobby history). */
+	/** Who is in an FNLB bot's party right now (from the fnlb SDK), for match details. */
+	fnlbPartyOf(userId, botName) {
+		const adapter = this.get(userId).adapter;
+		const cache = adapter?.engine === 'fnlb' ? adapter.manager?.bots?.cache : null;
+		const bot = [...(cache?.values?.() || [])].find((row) => row.displayName === botName || row.nickname === botName);
+		if (!bot) return null;
+		try {
+			return [...(bot.party?.members?.values?.() || [])].map((member) => ({
+				name: member.displayName || null,
+				isBot: member.id === bot.epicId,
+				isLeader: Boolean(member.isLeader)
+			}));
+		} catch {
+			return null;
+		}
+	}
+
 	async handleFnlbMatchmaking(userId, event) {
 		try {
+			if (event.type === 'start' || event.type === 'success') {
+				const party = this.fnlbPartyOf(userId, event.bot);
+				if (party?.length) event.party = party;
+			}
 			const round = await recordFnlbMatchmaking(userId, event);
 			if (event.type === 'success') {
 				const quality = event.realPlayers === 1 ? ' (bot lobby: you were the only real player)' : event.realPlayers ? ` (${event.realPlayers} real players)` : '';

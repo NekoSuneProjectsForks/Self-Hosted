@@ -98,6 +98,73 @@ function placementText(match) {
 	return 'Played';
 }
 
+/** Pop-up with everything known about one match (who played, queue, party). */
+export function renderMatchModal() {
+	const view = state.matchDetail;
+	if (!view) return '';
+	const d = view.data;
+	const row = (label, value) => `<div class="flex justify-between gap-3 py-1.5"><dt class="text-zinc-500">${label}</dt><dd class="text-right text-zinc-200">${value}</dd></div>`;
+	const body = view.loading
+		? '<p class="text-sm text-zinc-500">Loading…</p>'
+		: view.error
+			? `<p class="text-sm text-red-300">${escapeHtml(view.error)}</p>`
+			: `
+			<div class="grid gap-4 md:grid-cols-2">
+				<section class="card">
+					<p class="mb-1 text-xs font-semibold uppercase text-zinc-500">Match</p>
+					<dl class="divide-y divide-white/5 text-sm">
+						${row('Played by', `${escapeHtml(d.who.name || 'Unknown')} <span class="text-xs text-zinc-500">${d.who.kind === 'bot' ? 'bot' : 'player'}</span>`)}
+						${row('Mode', escapeHtml(d.mode.label || '-'))}
+						${row('Playlist', `<span class="font-mono text-xs">${escapeHtml(d.mode.playlistId || '-')}</span>`)}
+						${row('Input', escapeHtml(d.mode.input || '-'))}
+						${row('Started', formatDate(d.time.startedAt))}
+						${row('Ended', formatDate(d.time.endedAt))}
+						${row('Length', d.time.minutes ? `${d.time.minutes} min` : '-')}
+					</dl>
+				</section>
+				<section class="card">
+					<p class="mb-1 text-xs font-semibold uppercase text-zinc-500">Result</p>
+					<dl class="divide-y divide-white/5 text-sm">
+						${row('Result', d.result.win ? statusBadge('online', d.result.wins > 1 ? `${d.result.wins} wins` : 'Victory Royale') : escapeHtml(d.result.placement ? `Top ${d.result.placement}` : 'Played'))}
+						${row('Placements', d.result.placements.length ? d.result.placements.map((p) => `Top ${p.bucket}${p.count > 1 ? ` ×${p.count}` : ''}`).join(', ') : '-')}
+						${row('Kills', d.combat.kills)}
+						${row('K/D (this match)', d.combat.kd)}
+						${row('Players outlived', d.combat.playersOutlived ?? '-')}
+						${row('Score', d.combat.score ?? '-')}
+						${d.result.matches > 1 ? row('Note', `${d.result.matches} matches finished between two checks and are combined here`) : ''}
+					</dl>
+				</section>
+				<section class="card md:col-span-2">
+					<p class="mb-1 text-xs font-semibold uppercase text-zinc-500">Bot lobby queue</p>
+					${
+						d.queue
+							? `<dl class="divide-y divide-white/5 text-sm">
+								${row('Bot', escapeHtml(d.queue.bot))}
+								${row('Queued', formatDate(d.queue.queuedAt))}
+								${row('Queue time', formatDuration(d.queue.queueSeconds))}
+								${row('Region', escapeHtml(d.queue.region || '-'))}
+								${row('Real players in the match', d.queue.realPlayers === null ? '-' : `${d.queue.realPlayers}${d.queue.realPlayers === 1 ? ' (bot lobby)' : ''}`)}
+								${row('Party', d.queue.party?.length ? d.queue.party.map((m) => `${escapeHtml(m.name || 'Unknown')}${m.isBot ? ' <span class="text-xs text-zinc-500">bot</span>' : ''}${m.isLeader ? ' <span class="text-xs text-zinc-500">leader</span>' : ''}`).join(', ') : '-')}
+							</dl>`
+							: '<p class="text-sm text-zinc-500">No FNLB queue matched this game (it wasn\'t queued by your FNLB bot, or it was before queues were recorded).</p>'
+					}
+				</section>
+			</div>`;
+	return `
+		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" data-action="match-close-backdrop">
+			<div class="modal-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl p-5">
+				<div class="mb-4 flex items-start justify-between gap-3">
+					<div>
+						<p class="text-lg font-bold">${d ? escapeHtml(d.mode.label || 'Match') : 'Match details'}</p>
+						${d ? `<p class="text-xs text-zinc-500">${formatDate(d.time.endedAt)}</p>` : ''}
+					</div>
+					<button class="btn-secondary" data-action="match-close" aria-label="Close">${icon('x')}</button>
+				</div>
+				${body}
+			</div>
+		</div>`;
+}
+
 function pager(paging, action) {
 	if (!paging || paging.pages <= 1) return '';
 	return `
@@ -188,6 +255,7 @@ function trackingPanel() {
 						${bots.map((bot) => `<option value="${escapeHtml(bot.accountId)}" ${selected?.accountId === bot.accountId ? 'selected' : ''}>${escapeHtml(bot.name)}${bot.kind === 'bot' ? '' : ' (player)'}</option>`).join('')}
 					</select>
 					<button class="btn-secondary" data-action="tracked-poll">${icon('refresh-cw')} Check now</button>
+					<a class="btn-secondary" href="/api/tracked-players/export${selected ? `?bot=${encodeURIComponent(selected.accountId)}` : ''}" download title="A standalone HTML page you can share: names are shortened (first 4 letters) and no account IDs are included.">${icon('file-down')} Export HTML</a>
 				</div>
 			</div>
 
@@ -217,7 +285,7 @@ function trackingPanel() {
 								? matches
 										.map(
 											(match) => `
-						<tr>
+						<tr class="cursor-pointer hover:bg-white/[0.04]" data-action="match-open" data-match-id="${escapeHtml(match.id)}" title="Open match details">
 							<td class="whitespace-nowrap px-2 py-2 text-zinc-400">${formatDate(match.endedAt)}</td>
 							${selected ? '' : `<td class="px-2 py-2">${escapeHtml(match.player || '-')}</td>`}
 							<td class="px-2 py-2"><span class="font-medium">${escapeHtml(match.playlistLabel || match.playlistId || 'Match')}</span>${match.matches > 1 ? ` <span class="text-xs text-zinc-500">(${match.matches} combined)</span>` : ''}${match.inputLabel ? `<span class="block text-xs text-zinc-500">${escapeHtml(match.inputLabel)}</span>` : ''}</td>
