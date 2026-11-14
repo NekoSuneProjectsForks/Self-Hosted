@@ -55,19 +55,27 @@ export class PresenceProbe {
 		if (!stomp) return;
 		this.deploymentId ||= client.config?.eosDeploymentId;
 
-		const patchPresence = stomp.patchPresence.bind(stomp);
-		stomp.patchPresence = async (activity, props, status) => {
-			this.recordSent(activity, props, status);
-			return patchPresence(activity, props, status);
-		};
+		// fnbr builds differ: upstream fnbr publishes presence via STOMP
+		// patchPresence, @fnlb-project/fnbr 4.2.x sends it over XMPP and has no
+		// patchPresence. The probe is diagnostics only, so it must never stop
+		// the bot from starting when a hook is missing.
+		if (typeof stomp.patchPresence === 'function') {
+			const patchPresence = stomp.patchPresence.bind(stomp);
+			stomp.patchPresence = async (activity, props, status) => {
+				this.recordSent(activity, props, status);
+				return patchPresence(activity, props, status);
+			};
+		}
 
 		// STOMP reconnects create a new socket, so re-attach after every connect.
-		const connect = stomp.connect.bind(stomp);
-		stomp.connect = async (...args) => {
-			const result = await connect(...args);
-			this.attach(stomp.connection);
-			return result;
-		};
+		if (typeof stomp.connect === 'function') {
+			const connect = stomp.connect.bind(stomp);
+			stomp.connect = async (...args) => {
+				const result = await connect(...args);
+				this.attach(stomp.connection);
+				return result;
+			};
+		}
 		this.attach(stomp.connection);
 	}
 

@@ -9,6 +9,7 @@ import {
 	getMatchRound,
 	getMatchRounds
 } from '../services/matchTracker.js';
+import { getBotSessions } from '../services/sessionHistory.js';
 import { appVersion, asyncRoute, equipCosmetic, httpError } from '../http/helpers.js';
 
 export function registerBotRoutes(ctx) {
@@ -75,7 +76,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			// The fnbr adapter answers these synchronously and the FNLB one returns
 			// promises; Promise.resolve().then() normalizes both, and also catches
 			// a synchronous throw, so an optional list can never fail the request.
@@ -94,7 +95,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			const target = String(req.body.target || req.body.friendId || '').trim();
 			return res.status(201).json(await adapter.addFriend(target, req.params.botId));
 		})
@@ -105,7 +106,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.json(await adapter.removeFriend(req.params.friendId, req.params.botId));
 		})
 	);
@@ -115,7 +116,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.json(await adapter.acceptFriend(req.params.friendId, req.params.botId));
 		})
 	);
@@ -125,7 +126,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.json(await adapter.declineFriend(req.params.friendId, req.params.botId));
 		})
 	);
@@ -135,7 +136,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.json(await adapter.blockUser(req.params.friendId, req.params.botId));
 		})
 	);
@@ -145,7 +146,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.json(await adapter.unblockUser(req.params.friendId, req.params.botId));
 		})
 	);
@@ -176,7 +177,7 @@ export function registerBotRoutes(ctx) {
 			const content = String(req.body.content || '').trim();
 			if (!content) throw httpError(400, 'Message content is required.');
 			if (content.length > 2000) throw httpError(400, 'Message is too long.');
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.status(201).json(await adapter.sendFriendMessage(req.params.friendId, content));
 		})
 	);
@@ -188,7 +189,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			const friend = String(req.query.friend || '').trim();
 			return res.json(await adapter.comparePresence(friend || null));
 		})
@@ -199,7 +200,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.json({ blockedUsers: await adapter.getBlockedUsers(req.params.botId) });
 		})
 	);
@@ -209,7 +210,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.json({ party: await adapter.getParty(req.params.botId) });
 		})
 	);
@@ -221,7 +222,7 @@ export function registerBotRoutes(ctx) {
 		asyncRoute(async (req, res) => {
 			const content = String(req.body.content || '').trim();
 			if (!content) throw httpError(400, 'Message content is required.');
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			return res.status(201).json(await adapter.sendPartyMessage(content, req.params.botId));
 		})
 	);
@@ -232,7 +233,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			const results = [];
 
 			if (req.body.privacy !== undefined) results.push(await adapter.setPrivacy(req.body.privacy, req.params.botId));
@@ -258,7 +259,7 @@ export function registerBotRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			if (req.body.clearEmote) return res.json(await adapter.clearEmote(req.params.botId));
 
 			const slot = String(req.body.slot || '').trim();
@@ -309,7 +310,7 @@ export function registerBotRoutes(ctx) {
 		asyncRoute(async (req, res) => {
 			const prefix = String(req.query.prefix || req.query.q || '').trim();
 			if (!prefix) throw httpError(400, 'Search prefix is required.');
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
 			const users = await adapter.searchUsers(prefix, req.query.platform || 'epic', req.query.botId);
 			return res.json({ users });
 		})
