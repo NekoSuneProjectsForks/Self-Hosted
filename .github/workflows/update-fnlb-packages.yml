@@ -1,0 +1,63 @@
+# Checks npm every 6 hours for new releases of fnlb and @fnlb-project/fnbr.
+# When one is out it bumps package.json + package-lock.json, runs the unit
+# tests, and commits straight to the branch only if the tests pass.
+name: Update fnlb / fnbr
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-fnlb-packages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dashboard
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check for new versions
+        id: check
+        run: |
+          set -euo pipefail
+          changed=""
+          for pkg in fnlb @fnlb-project/fnbr; do
+            latest=$(npm view "$pkg" version)
+            current=$(node -p "require('./package-lock.json').packages['node_modules/$pkg']?.version ?? ''")
+            echo "$pkg: installed=$current latest=$latest"
+            if [ "$current" != "$latest" ]; then
+              npm pkg set "dependencies.$pkg=^$latest"
+              changed="$changed $pkg@$latest"
+            fi
+          done
+          echo "changed=${changed# }" >> "$GITHUB_OUTPUT"
+
+      - name: Update lockfile
+        if: steps.check.outputs.changed != ''
+        run: npm install --package-lock-only --no-audit --no-fund
+
+      - name: Run tests
+        if: steps.check.outputs.changed != ''
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
+      - name: Commit
+        if: steps.check.outputs.changed != ''
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(deps): update ${{ steps.check.outputs.changed }}"
+          git push
