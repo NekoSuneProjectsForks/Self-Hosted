@@ -114,7 +114,8 @@ Authorization code deleted
 
 Every later start reuses the stored device auth automatically.
 
-- Get a one-time authorization code from Epic, paste it into **Config**, and start the bot.
+- **Use a dummy Epic account, never your main.** A bot account carries a high risk of being banned if it is abused. The **Get code from Epic** button shows this warning, and you must confirm it before the link opens or can be copied.
+- Get a one-time authorization code from Epic, paste it into **Config**, and start the bot. Paste the bare code, the whole JSON page Epic shows, or the redirect URL; the code is pulled out of any of them.
 - The code is single-use, never logged, never returned by any API, and is deleted once device auth exists.
 - Device auth secrets are encrypted at rest and are never sent to the browser.
 
@@ -175,7 +176,10 @@ needed.
   Matches and Items pages to any online extra bot. Every `/api/bots/:botId/*`
   route accepts an extra bot's account ID.
 
-Extra bots use the main bot's platform, status and loadout. A party holds 16,
+Each extra bot can show as its own platform (PC, PS5, Xbox Series X|S, Switch,
+mobile and so on), or use the main bot's. The platform is fixed at login, so a
+change applies the next time that bot starts. Extra bots use the main bot's
+status and loadout. A party holds 16,
 so the limit is 15 extra accounts.
 
 ### Friend DM commands

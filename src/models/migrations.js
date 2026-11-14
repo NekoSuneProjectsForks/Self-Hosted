@@ -6,6 +6,16 @@ import { sequelize } from './sequelize.js';
  * `sequelize.sync()` does not add columns to existing tables, so each new
  * BotConfig field needs an entry here.
  */
+/** BotAccounts shipped without `platform` in the first Bot Lobby release. */
+export async function ensureBotAccountColumns() {
+	const queryInterface = sequelize.getQueryInterface();
+	const table = await queryInterface.describeTable('BotAccounts').catch(() => null);
+	if (!table) return;
+	if (!table.platform) {
+		await queryInterface.addColumn('BotAccounts', 'platform', { type: DataTypes.STRING(16), allowNull: true });
+	}
+}
+
 export async function ensureBotConfigColumns() {
 	const queryInterface = sequelize.getQueryInterface();
 	const table = await queryInterface.describeTable('BotConfigs').catch(() => null);

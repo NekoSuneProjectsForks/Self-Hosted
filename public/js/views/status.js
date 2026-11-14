@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { count, detailRow, escapeHtml, formatDate, icon, renderList, smallCount, statCard, statusBadge, valueOrDash } from '../core/ui.js';
 import { dashboardAvailable, usingLocalFnbr } from '../core/selectors.js';
+import { platformLabel } from '../core/platforms.js';
 
 export function renderMetricCards() {
 	const config = state.config || {};
@@ -12,7 +13,7 @@ export function renderMetricCards() {
 			</div>
 			<div class="card">
 				<p class="text-xs uppercase text-zinc-500">${usingLocalFnbr() ? 'Platform' : 'Bots per Shard'}</p>
-				<p class="mt-2 text-2xl font-bold">${usingLocalFnbr() ? escapeHtml(config.platform || 'WIN') : escapeHtml(config.botsPerShard ?? 32)}</p>
+				<p class="mt-2 text-2xl font-bold">${usingLocalFnbr() ? escapeHtml(platformLabel(config.platform || 'WIN')) : escapeHtml(config.botsPerShard ?? 32)}</p>
 			</div>
 			<div class="card">
 				<p class="text-xs uppercase text-zinc-500">Restart Interval</p>
@@ -123,6 +124,7 @@ function renderBotCard(bot) {
 			</div>
 			<div class="mt-4 grid gap-2 text-sm text-zinc-400 sm:grid-cols-2">
 				<p>Engine: <span class="text-zinc-200">${escapeHtml(bot.source || 'fnlb')}</span></p>
+				${bot.source === 'fnbr' ? `<p>Platform: <span class="text-zinc-200">${escapeHtml(platformLabel(bot.platform || state.config?.platform))}</span></p>` : ''}
 				<p>Flags: <span class="text-zinc-200">${escapeHtml(bot.flagsList?.join(', ') || 'None')}</span></p>
 				<p>MMS ban: <span class="text-zinc-200">${escapeHtml(bot.mmsBannedUntil ? formatDate(bot.mmsBannedUntil) : 'No')}</span></p>
 				<p>Friends: <span class="text-zinc-200">${valueOrDash(bot.friendsCount)}</span></p>

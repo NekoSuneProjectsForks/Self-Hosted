@@ -576,6 +576,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			source: 'fnbr',
 			runtimeMode: 'fnbr',
 			presenceStatus: this.startConfig.defaultStatus,
+			platform: this.startConfig.platform || null,
 			friendsCount: client?.friend?.list?.size ?? null,
 			pendingFriendsCount: client?.friend?.pendingList?.size ?? null,
 			blockedUsersCount: client?.user?.blocklist?.size ?? null,

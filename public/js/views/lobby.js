@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { platformLabel } from '../core/platforms.js';
 import { escapeHtml, icon, statusBadge, valueOrDash } from '../core/ui.js';
 import { usingLocalFnbr, controlBot, controlBotId, controlCan, controlCapabilities, controlOnline } from '../core/selectors.js';
 
@@ -55,7 +56,7 @@ function memberCard(member, leaderId) {
 				</div>
 			</div>
 			<dl class="mt-3 grid gap-1 text-xs text-zinc-400">
-				<div class="flex justify-between gap-2"><dt>Platform</dt><dd>${valueOrDash(member.platform)}</dd></div>
+				<div class="flex justify-between gap-2"><dt>Platform</dt><dd>${member.platform ? escapeHtml(platformLabel(member.platform)) : '-'}</dd></div>
 				${member.matchInfo?.location ? `<div class="flex justify-between gap-2"><dt>Match</dt><dd>${escapeHtml(member.matchInfo.location)}</dd></div>` : ''}
 				${cosmetics
 					.map(

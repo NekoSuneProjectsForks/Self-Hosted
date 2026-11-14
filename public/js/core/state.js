@@ -22,6 +22,9 @@ export const state = {
 	// Epic stats looked up from the Lobby page, keyed by account ID.
 	memberStats: {},
 	lobbySettings: null,
+	// "Use a dummy account" warning shown before opening Epic's code page.
+	epicCodePrompt: false,
+	epicCodeAck: false,
 	quickCommands: [],
 	userSearchResults: [],
 	itemSearchResults: [],

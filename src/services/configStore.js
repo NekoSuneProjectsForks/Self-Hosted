@@ -100,7 +100,36 @@ function normalizeReleaseChannel(value) {
 	return value === 'beta' ? 'beta' : 'stable';
 }
 
-function normalizePlatform(value, fallback = DEFAULT_CONFIG.platform) {
+export const PLATFORM_NAMES = {
+	WIN: 'Windows PC',
+	MAC: 'Mac',
+	PSN: 'PlayStation 4',
+	PS5: 'PlayStation 5',
+	XBL: 'Xbox One',
+	XSX: 'Xbox Series X|S',
+	SWT: 'Nintendo Switch',
+	SWT2: 'Nintendo Switch 2',
+	IOS: 'iOS',
+	AND: 'Android',
+	LUNA: 'Amazon Luna'
+};
+
+/**
+ * Accepts the bare 32-character code, the whole JSON page Epic shows
+ * ({"redirectUrl":...,"authorizationCode":"..."}), or a redirect URL with
+ * ?code=, so pasting whatever was copied just works.
+ */
+export function extractAuthorizationCode(value) {
+	const text = String(value ?? '').trim();
+	if (!text) return '';
+	const fromJson = text.match(/"authorizationCode"\s*:\s*"([^"]+)"/);
+	if (fromJson) return fromJson[1].trim();
+	const fromUrl = text.match(/[?&]code=([A-Za-z0-9]+)/);
+	if (fromUrl) return fromUrl[1];
+	return text;
+}
+
+export function normalizePlatform(value, fallback = DEFAULT_CONFIG.platform) {
 	const platform = cleanText(value, fallback).toUpperCase();
 	return SUPPORTED_PLATFORMS.has(platform) ? platform : fallback;
 }
@@ -221,7 +250,7 @@ export async function upsertPlainConfig(userId, payload) {
 		authorizationCode:
 			payload.authorizationCode === undefined || payload.authorizationCode === ''
 				? current.authorizationCode
-				: cleanText(payload.authorizationCode),
+				: extractAuthorizationCode(payload.authorizationCode),
 		categories: cleanText(payload.categories, current.categories),
 		bots: cleanText(payload.bots, current.bots),
 		releaseChannel: normalizeReleaseChannel(payload.releaseChannel ?? current.releaseChannel),

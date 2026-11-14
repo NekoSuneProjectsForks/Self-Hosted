@@ -12,6 +12,7 @@ import { renderFriends } from './friends.js';
 import { renderMessages } from './messages.js';
 import { renderMatches } from './matches.js';
 import { renderBotLobby } from './botlobby.js';
+import { renderEpicCodePrompt } from '../core/platforms.js';
 
 /** Total unread DMs, surfaced in the nav so incoming messages are noticeable. */
 function messagesNavLabel() {
@@ -36,6 +37,7 @@ export function renderShell() {
 
 	return `
 		${renderToast()}
+		${renderEpicCodePrompt()}
 		<div class="min-h-screen lg:grid lg:grid-cols-[280px_1fr]">
 			<aside class="border-b border-white/10 bg-black/25 p-4 backdrop-blur lg:min-h-screen lg:border-b-0 lg:border-r">
 				<div class="mb-6 flex items-center justify-between lg:block">

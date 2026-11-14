@@ -1,6 +1,6 @@
 import { BotAccount } from '../models/index.js';
 import { decryptText, encryptText, maskSecret } from '../lib/secrets.js';
-import { normalizeDeviceAuth } from './configStore.js';
+import { extractAuthorizationCode, normalizeDeviceAuth, normalizePlatform } from './configStore.js';
 
 /** A Fortnite party holds 16; the main bot takes one seat. */
 export const MAX_BOT_ACCOUNTS = 15;
@@ -35,6 +35,8 @@ export function plainAccount(row) {
 		accountId: row.accountId,
 		displayName: row.displayName,
 		autoStart: row.autoStart,
+		// null = use the main bot's platform.
+		platform: row.platform || null,
 		deviceAuth: parseDeviceAuth(row),
 		authorizationCode: decryptText(row.authorizationCodeEncrypted)
 	};
@@ -48,10 +50,20 @@ export function sanitizeAccount(account) {
 		accountId: account.accountId,
 		displayName: account.displayName,
 		autoStart: account.autoStart,
+		platform: account.platform,
 		deviceAuthConfigured: Boolean(account.deviceAuth?.accountId),
 		deviceAuthMasked: account.deviceAuth?.accountId ? maskSecret(account.deviceAuth.accountId) : '',
 		authorizationCodeConfigured: Boolean(account.authorizationCode)
 	};
+}
+
+/** '' or 'main' means "same as the main bot". */
+function platformFrom(value) {
+	const text = String(value ?? '').trim().toUpperCase();
+	if (!text || text === 'MAIN') return null;
+	const platform = normalizePlatform(text, '');
+	if (!platform) throw httpError(400, `Unsupported platform: ${value}`);
+	return platform;
 }
 
 export async function listBotAccounts(userId) {
@@ -71,7 +83,7 @@ export async function getBotAccount(userId, id) {
 
 function authFromPayload(payload) {
 	const values = {};
-	const code = String(payload.authorizationCode ?? '').trim();
+	const code = extractAuthorizationCode(payload.authorizationCode);
 	if (code) {
 		values.authorizationCodeEncrypted = encryptText(code);
 		// A fresh code replaces stale device auth, which is what "re-auth" means.
@@ -105,6 +117,7 @@ export async function createBotAccount(userId, payload) {
 		userId,
 		label: cleanLabel(payload.label, `Bot ${count + 2}`),
 		autoStart: Boolean(payload.autoStart),
+		platform: platformFrom(payload.platform),
 		...auth
 	});
 	return plainAccount(row);
@@ -115,6 +128,7 @@ export async function updateBotAccount(userId, id, payload) {
 	const values = authFromPayload(payload);
 	if (payload.label !== undefined) values.label = cleanLabel(payload.label, row.label);
 	if (payload.autoStart !== undefined) values.autoStart = Boolean(payload.autoStart);
+	if (payload.platform !== undefined) values.platform = platformFrom(payload.platform);
 	await row.update(values);
 	return plainAccount(row);
 }

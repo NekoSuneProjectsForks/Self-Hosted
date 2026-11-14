@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
 	DEFAULT_LOCAL_CATEGORY_ID,
 	getPlainConfig,
+	normalizePlatform,
 	saveDeviceAuthForUser,
 	validateStartConfig
 } from '../services/configStore.js';
@@ -94,6 +95,7 @@ function offlineLocalBot(config) {
 		source: 'fnbr',
 		runtimeMode: 'fnbr',
 		presenceStatus: config.defaultStatus,
+		platform: config.platform || null,
 		friendsCount: null,
 		pendingFriendsCount: null,
 		blockedUsersCount: null,
@@ -723,6 +725,8 @@ export class RuntimeManager {
 			lastError: entry.lastError,
 			authRequired: entry.authRequired,
 			startedAt: entry.startedAt,
+			// What the running client actually logged in as (platform is fixed at login).
+			activePlatform: entry.adapter?.startConfig?.platform || null,
 			bot: entry.adapter && entry.status === 'online' ? entry.adapter.toBotCard() : null
 		};
 	}
@@ -756,7 +760,11 @@ export class RuntimeManager {
 			authorizationCode: account.authorizationCode
 		});
 		// Each account has its own tokens; never let one bot kick another's session.
-		return { ...startConfig, killOtherTokens: false };
+		return {
+			...startConfig,
+			platform: account.platform ? normalizePlatform(account.platform, startConfig.platform) : startConfig.platform,
+			killOtherTokens: false
+		};
 	}
 
 	createHelperAdapter(userId, account, startConfig) {

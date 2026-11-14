@@ -39,6 +39,11 @@ BotAccount.init(
 			type: DataTypes.TEXT,
 			allowNull: true
 		},
+		// Fortnite platform this bot presents as; null = same as the main bot.
+		platform: {
+			type: DataTypes.STRING(16),
+			allowNull: true
+		},
 		// Start with the main bot and join its lobby automatically.
 		autoStart: {
 			type: DataTypes.BOOLEAN,

@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { epicCodeButton, platformOptions } from '../core/platforms.js';
 import { escapeHtml, icon } from '../core/ui.js';
 
 // Browsers and password managers autofill any password field, which would
@@ -38,13 +39,11 @@ export function renderConfig() {
 					</label>
 					<label class="md:col-span-2" ${fnbr}>
 					<span class="label">One-time Epic Authorization Code</span>
-					<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="${config.authorizationCodeConfigured ? 'Saved authorization code pending use' : 'Paste 32 character code from Epic login redirect'}" />
-						${config.deviceAuthConfigured ? '' : `
-							<span class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-								<a class="btn-secondary" href="https://www.epicgames.com/id/api/redirect?clientId=3f69e56c7649492c8cc29f1af08a8a12&responseType=code" target="_blank" rel="noopener noreferrer">${icon('external-link')} Get code from Epic</a>
-								Sign in as the bot account, then copy the <code>authorizationCode</code> value and paste it here. It works once and expires in a few minutes.
-							</span>
-						`}
+					<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="${config.authorizationCodeConfigured ? 'Saved authorization code pending use' : config.deviceAuthConfigured ? 'Signed in. Paste a new code only to switch account' : 'Paste the code, or the whole page Epic shows'}" />
+						<span class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+							${epicCodeButton(config.deviceAuthConfigured ? 'Get a new code from Epic' : 'Get code from Epic')}
+							Use a <strong class="text-red-300">dummy account</strong>, never your main. Paste the <code>authorizationCode</code> or the whole page. It works once and expires in a few minutes.
+						</span>
 					</label>
 					<label ${fnbr}>
 					<span class="label">Device Auth Account ID</span>
@@ -59,10 +58,11 @@ export function renderConfig() {
 					<input class="input" name="deviceAuthSecret" type="password" ${NO_AUTOFILL} placeholder="secret" />
 					</label>
 					<label ${fnbr}>
-					<span class="label">Platform</span>
+					<span class="label">Platform the bot shows as</span>
 						<select class="input" name="platform">
-							${['WIN', 'MAC', 'PSN', 'PS5', 'XBL', 'XSX', 'SWT', 'SWT2', 'IOS', 'AND', 'LUNA'].map((platform) => `<option value="${platform}" ${config.platform === platform ? 'selected' : ''}>${platform}</option>`).join('')}
+							${platformOptions(config.platform || 'WIN')}
 						</select>
+						<span class="mt-1 block text-xs text-zinc-500">Players see this platform icon on the bot in Fortnite. A change applies on the next restart.</span>
 					</label>
 					<label ${fnbr}>
 					<span class="label">Default Status</span>

@@ -20,6 +20,7 @@ import {
 	loadSession
 } from './data/loaders.js';
 import { showEngineFields } from './views/config.js';
+import { EPIC_CODE_URL } from './core/platforms.js';
 
 export function pushApiResponse(response) {
 	state.commandResponses.push({
@@ -154,6 +155,38 @@ document.addEventListener('click', async (event) => {
 			await loadMe();
 			setToast('Cluster stopped.');
 		}
+		// ---- "Use a dummy account" warning before the Epic code page ----
+		if (action === 'epic-code-prompt') {
+			state.epicCodePrompt = true;
+			state.epicCodeAck = false;
+			render();
+			return;
+		}
+		if (action === 'epic-code-cancel') {
+			state.epicCodePrompt = false;
+			render();
+			return;
+		}
+		if (action === 'epic-code-open' || action === 'epic-code-copy') {
+			if (!state.epicCodeAck) return;
+			if (action === 'epic-code-open') {
+				window.open(EPIC_CODE_URL, '_blank', 'noopener,noreferrer');
+				setToast('Sign in as the dummy account, then paste the code or the whole page into the code box.');
+			} else {
+				try {
+					await navigator.clipboard.writeText(EPIC_CODE_URL);
+					setToast('Link copied. Open it in a private window signed in as the dummy account.');
+				} catch {
+					document.querySelector('[data-epic-code-url]')?.select();
+					setToast('Copy the selected link with Ctrl+C.');
+					return;
+				}
+			}
+			state.epicCodePrompt = false;
+			render();
+			return;
+		}
+
 		// ---- Bot Lobby (extra bot accounts) ----
 		if (action && action.startsWith('botacc-') || action && action.startsWith('botlobby-')) {
 			await handleBotLobbyAction(action, button);
@@ -617,6 +650,11 @@ document.addEventListener('change', (event) => {
 	if (autoRefresh) state.autoRefresh = autoRefresh.checked;
 	const engineSelect = event.target.closest('[data-action="config-engine"]');
 	if (engineSelect) showEngineFields(engineSelect.form, engineSelect.value);
+	const epicAck = event.target.closest('[data-action="epic-code-ack"]');
+	if (epicAck) {
+		state.epicCodeAck = epicAck.checked;
+		render();
+	}
 	const lobbySetting = event.target.closest('[data-action="lobby-setting"]');
 	if (lobbySetting) {
 		api('/api/bot-lobby/settings', { method: 'PATCH', body: { [lobbySetting.dataset.setting]: lobbySetting.checked } })
@@ -738,7 +776,12 @@ async function handleBotLobbyForm(form, data) {
 	if (form.dataset.form === 'botacc-create') {
 		await api('/api/bot-accounts', {
 			method: 'POST',
-			body: { label: data.label, authorizationCode: data.authorizationCode, autoStart: data.autoStart === 'true' }
+			body: {
+				label: data.label,
+				authorizationCode: data.authorizationCode,
+				platform: data.platform,
+				autoStart: data.autoStart === 'true'
+			}
 		});
 		form.reset();
 		setToast('Bot account added. Start it now, before the authorization code expires.');
@@ -746,9 +789,17 @@ async function handleBotLobbyForm(form, data) {
 	if (form.dataset.form === 'botacc-update') {
 		await api(`/api/bot-accounts/${encodeURIComponent(form.dataset.accountId)}`, {
 			method: 'PATCH',
-			body: { label: data.label, authorizationCode: data.authorizationCode }
+			body: { label: data.label, authorizationCode: data.authorizationCode, platform: data.platform }
 		});
-		setToast(data.authorizationCode ? 'New code saved. Start the bot to sign in.' : 'Saved.');
+		const account = state.botAccounts.find((row) => row.id === form.dataset.accountId);
+		const running = account && ['starting', 'online'].includes(account.status);
+		setToast(
+			data.authorizationCode
+				? 'New code saved. Start the bot to sign in.'
+				: running && (data.platform || null) !== (account.platform || null)
+					? 'Saved. Stop and start this bot to switch platform.'
+					: 'Saved.'
+		);
 	}
 	if (form.dataset.form === 'botlobby-join') {
 		const result = await api('/api/bot-lobby/join', { method: 'POST', body: { target: data.target } });
@@ -799,3 +850,10 @@ async function handleAdminAction(action, userId) {
 	setToast('Admin change saved.');
 	render();
 }
+
+document.addEventListener('keydown', (event) => {
+	if (event.key === 'Escape' && state.epicCodePrompt) {
+		state.epicCodePrompt = false;
+		render();
+	}
+});

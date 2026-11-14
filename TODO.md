@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 90/90 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 95/95 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -186,3 +186,6 @@ modules plus a 167-line wiring file.
 - [x] Lobby behaviour settings (auto-ready, lobby chat commands, DM commands, accept invites and friend requests), applied live to every bot
 - [x] fnbr capabilities were missing `sittingOut` / `squadFill`, so the Sit Out and Fill buttons never showed
 - [ ] Not adopted: 2M4U/Fortnite-WebSocket-Client forges the matchmaking ticket checksum to queue a bot (an integrity bypass, out of scope). johndpope/FortniteClient is a 2019 bot on the dead library, with a party "crash" mode. Neither returns match stats.
+- [x] Per-bot platform for extra bots (or the main bot's), with readable platform names everywhere; `BotAccounts.platform` migration
+- [x] "Get code from Epic" opens a dummy-account warning; Open/Copy only unlock after ticking it
+- [x] Auth code fields accept the bare code, Epic's whole JSON page, or the redirect URL

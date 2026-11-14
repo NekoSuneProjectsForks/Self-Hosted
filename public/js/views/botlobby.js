@@ -1,10 +1,18 @@
 import { state } from '../core/state.js';
 import { escapeHtml, formatDate, icon, statusBadge } from '../core/ui.js';
 import { runtimeOnline, usingLocalFnbr } from '../core/selectors.js';
+import { epicCodeButton, platformLabel, platformOptions } from '../core/platforms.js';
 
 const NO_AUTOFILL = 'autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"';
-const EPIC_CODE_URL =
-	'https://www.epicgames.com/id/api/redirect?clientId=3f69e56c7649492c8cc29f1af08a8a12&responseType=code';
+
+function mainPlatform() {
+	return state.config?.platform || 'WIN';
+}
+
+/** The platform this bot logs in as: its own, or the main bot's. */
+function effectivePlatform(account) {
+	return account.platform || mainPlatform();
+}
 
 function mainParty() {
 	return state.party && !state.controlBotId ? state.party : state.bots?.[0]?.party || null;
@@ -38,6 +46,8 @@ function accountCard(account) {
 			</div>
 
 			<dl class="mt-3 grid gap-1 text-xs text-zinc-400">
+				<div class="flex justify-between gap-2"><dt>Platform</dt><dd>${escapeHtml(platformLabel(account.activePlatform || effectivePlatform(account)))}${account.platform ? '' : ' · main'}</dd></div>
+				${account.activePlatform && account.activePlatform !== effectivePlatform(account) ? `<div class="text-amber-300">Restart this bot to switch to ${escapeHtml(platformLabel(effectivePlatform(account)))}.</div>` : ''}
 				<div class="flex justify-between gap-2"><dt>Epic login</dt><dd>${account.deviceAuthConfigured ? `Device auth ${escapeHtml(account.deviceAuthMasked)}` : account.authorizationCodeConfigured ? 'Auth code waiting for first start' : 'None'}</dd></div>
 				${online ? `<div class="flex justify-between gap-2"><dt>Party</dt><dd>${party ? `${party.size ?? party.members?.length ?? 1}/${party.maxSize ?? 16}` : '-'}</dd></div>` : ''}
 				${online && bot?.cosmetics?.outfit ? `<div class="flex justify-between gap-2"><dt>Outfit</dt><dd class="truncate">${escapeHtml(bot.cosmetics.outfit)}</dd></div>` : ''}
@@ -63,8 +73,12 @@ function accountCard(account) {
 				<summary class="cursor-pointer text-xs text-zinc-400">Sign in again / rename / remove</summary>
 				<form class="mt-2 grid gap-2" data-form="botacc-update" data-account-id="${id}">
 					<input class="input" name="label" value="${escapeHtml(account.label)}" maxlength="64" placeholder="Label" />
+					<select class="input" name="platform" title="Platform this bot shows as">
+						${platformOptions(account.platform, { includeMain: true, mainPlatform: mainPlatform() })}
+					</select>
 					<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="New one-time authorization code" />
 					<div class="flex flex-wrap gap-2">
+						${epicCodeButton('Get code')}
 						<button class="btn-secondary" type="submit">${icon('save')} Save</button>
 						<button class="btn-secondary" type="button" data-action="botacc-clear-auth" data-account-id="${id}">${icon('key-round')} Clear login</button>
 						<button class="btn-danger" type="button" data-action="botacc-delete" data-account-id="${id}">${icon('trash-2')} Remove</button>
@@ -80,17 +94,20 @@ function addForm() {
 	return `
 		<section class="shell-panel rounded-lg p-4">
 			<p class="font-semibold">Add a bot account</p>
-			<p class="mt-1 text-sm text-zinc-500">Use a separate Epic account for each bot. Open the Epic link while signed in as <em>that</em> bot account (a private window helps), copy the <code>authorizationCode</code> value, and paste it here. Codes work once and expire within minutes, so start the bot soon after adding it. After the first login the device auth is saved encrypted and reused.</p>
-			<form class="mt-3 grid gap-3 md:grid-cols-[1fr_2fr_auto_auto]" data-form="botacc-create">
+			<p class="mt-1 text-sm text-zinc-500">Use a separate <strong class="text-red-300">dummy</strong> Epic account for each bot, never your main account. Bot accounts are at high risk of a ban if abused. Get the code while signed in as <em>that</em> account (a private window helps), then paste the code or the whole page Epic shows. Codes work once and expire within minutes, so start the bot soon after adding it. After the first login the device auth is saved encrypted and reused.</p>
+			<form class="mt-3 grid gap-3 md:grid-cols-[1fr_2fr_1fr_auto_auto]" data-form="botacc-create">
 				<input class="input" name="label" maxlength="64" placeholder="Label, e.g. Bot 2" />
-				<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="One-time Epic authorization code" required />
+				<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="Code, or the whole page Epic shows" required />
+				<select class="input" name="platform" title="Platform this bot shows as">
+					${platformOptions('', { includeMain: true, mainPlatform: mainPlatform() })}
+				</select>
 				<label class="flex items-center gap-2 text-sm text-zinc-300">
 					<input class="h-4 w-4 accent-fnlb-500" type="checkbox" name="autoStart" value="true" /> Auto-start
 				</label>
 				<button class="btn-primary" type="submit" ${full ? 'disabled' : ''}>${icon('plus')} Add</button>
 			</form>
 			<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-				<a class="btn-secondary" href="${EPIC_CODE_URL}" target="_blank" rel="noopener noreferrer">${icon('external-link')} Get code from Epic</a>
+				${epicCodeButton()}
 				${state.botAccounts.length}/${state.maxBotAccounts} extra bots
 			</div>
 		</section>
