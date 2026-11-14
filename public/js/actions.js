@@ -159,12 +159,25 @@ document.addEventListener('click', async (event) => {
 		if (action === 'epic-code-prompt') {
 			state.epicCodePrompt = true;
 			state.epicCodeAck = false;
+			state.epicCodeTarget = button.dataset.epicTarget || 'main';
+			state.epicCodeLabel = document.querySelector('[data-form="botacc-create"] [name="label"]')?.value || '';
+			state.epicLogin = null;
 			render();
 			return;
 		}
 		if (action === 'epic-code-cancel') {
-			state.epicCodePrompt = false;
+			closeEpicPrompt();
+			return;
+		}
+		if (action === 'epic-signin-start') {
+			if (!state.epicCodeAck) return;
+			const login = await api('/api/epic-login', {
+				method: 'POST',
+				body: { target: state.epicCodeTarget, label: state.epicCodeLabel }
+			});
+			state.epicLogin = login;
 			render();
+			pollEpicLogin();
 			return;
 		}
 		if (action === 'epic-code-open' || action === 'epic-code-copy') {
@@ -852,8 +865,57 @@ async function handleAdminAction(action, userId) {
 }
 
 document.addEventListener('keydown', (event) => {
-	if (event.key === 'Escape' && state.epicCodePrompt) {
-		state.epicCodePrompt = false;
-		render();
-	}
+	if (event.key === 'Escape' && state.epicCodePrompt) closeEpicPrompt();
 });
+
+let epicPollTimer = null;
+
+function closeEpicPrompt() {
+	if (epicPollTimer) clearTimeout(epicPollTimer);
+	epicPollTimer = null;
+	const login = state.epicLogin;
+	if (login?.loginId && login.status === 'pending') {
+		api(`/api/epic-login/${encodeURIComponent(login.loginId)}`, { method: 'DELETE', body: {} }).catch(() => {});
+	}
+	state.epicLogin = null;
+	state.epicCodePrompt = false;
+	render();
+}
+
+/** Asks the server every few seconds whether the Epic sign-in has finished. */
+function pollEpicLogin() {
+	if (epicPollTimer) clearTimeout(epicPollTimer);
+	const login = state.epicLogin;
+	if (!login?.loginId || login.status !== 'pending') return;
+	epicPollTimer = setTimeout(async () => {
+		epicPollTimer = null;
+		if (state.epicLogin?.loginId !== login.loginId) return;
+		try {
+			const result = await api(`/api/epic-login/${encodeURIComponent(login.loginId)}`);
+			if (result.status === 'pending') {
+				pollEpicLogin();
+				return;
+			}
+			if (result.status === 'expired') {
+				state.epicLogin = { ...login, status: 'expired' };
+				render();
+				return;
+			}
+			const who = result.displayName ? ` as ${result.displayName}` : '';
+			state.epicLogin = null;
+			state.epicCodePrompt = false;
+			await Promise.all([loadMe().catch(() => {}), loadBotAccounts(false).catch(() => {})]);
+			document.querySelector('[data-form="botacc-create"]')?.reset();
+			setToast(
+				result.target === 'main'
+					? `Signed in${who}. The login is saved, so press Start Cluster.`
+					: `Signed in${who}. The bot's login is saved, so press Start on its card.`
+			);
+			render();
+		} catch (error) {
+			state.epicLogin = null;
+			setToast(error.message, 'error');
+			render();
+		}
+	}, Math.max(3, login.interval || 5) * 1000);
+}

@@ -30,3 +30,16 @@ describe('platforms', () => {
 		assert.equal(normalizePlatform('NOPE', ''), '');
 	});
 });
+
+describe('assertAuthorizationCode', async () => {
+	const { assertAuthorizationCode } = await import('../src/services/configStore.js');
+	it('accepts a 32 character code', () => {
+		assert.equal(assertAuthorizationCode('0123456789abcdef0123456789ABCDEF'), '0123456789abcdef0123456789ABCDEF');
+	});
+	it('rejects an access token with a clear message', () => {
+		assert.throws(() => assertAuthorizationCode('eg1~eyJraWQiOi.abc'), /access token/);
+	});
+	it('rejects a short paste', () => {
+		assert.throws(() => assertAuthorizationCode('abc'), (error) => error.status === 400);
+	});
+});

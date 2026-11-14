@@ -1,6 +1,6 @@
 import { BotAccount } from '../models/index.js';
 import { decryptText, encryptText, maskSecret } from '../lib/secrets.js';
-import { extractAuthorizationCode, normalizeDeviceAuth, normalizePlatform } from './configStore.js';
+import { assertAuthorizationCode, extractAuthorizationCode, normalizeDeviceAuth, normalizePlatform } from './configStore.js';
 
 /** A Fortnite party holds 16; the main bot takes one seat. */
 export const MAX_BOT_ACCOUNTS = 15;
@@ -83,7 +83,7 @@ export async function getBotAccount(userId, id) {
 
 function authFromPayload(payload) {
 	const values = {};
-	const code = extractAuthorizationCode(payload.authorizationCode);
+	const code = assertAuthorizationCode(extractAuthorizationCode(payload.authorizationCode));
 	if (code) {
 		values.authorizationCodeEncrypted = encryptText(code);
 		// A fresh code replaces stale device auth, which is what "re-auth" means.
@@ -153,6 +153,12 @@ export async function clearBotAccountAuth(userId, id) {
 	const row = await findRow(userId, id);
 	await row.update({ deviceAuthEncrypted: null, authorizationCodeEncrypted: null });
 	return plainAccount(row);
+}
+
+/** A rejected one-time code is dead; drop it so it isn't retried forever. */
+export async function clearBotAccountCode(userId, id) {
+	const row = await BotAccount.findOne({ where: { id, userId } });
+	if (row) await row.update({ authorizationCodeEncrypted: null });
 }
 
 export async function deleteBotAccount(userId, id) {

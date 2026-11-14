@@ -262,6 +262,16 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			// Epic rejects stale device auth with an auth-shaped error. Surface that
 			// as "authentication required" so the UI can offer re-auth instead of
 			// showing a generic crash.
+			const usedCode = !this.startConfig.deviceAuth && Boolean(this.startConfig.authorizationCode);
+			if (usedCode && this.isAuthError(error)) {
+				this.authRequired = true;
+				const rejected = runtimeError(
+					401,
+					'Epic rejected the one-time authorization code. Codes work once and expire after about 5 minutes, and must come from the same account you want as the bot. Get a fresh code and start straight away, or use "Sign in with Epic".'
+				);
+				rejected.authCodeRejected = true;
+				throw rejected;
+			}
 			if (this.isAuthError(error)) {
 				this.authRequired = true;
 				throw runtimeError(
@@ -295,7 +305,9 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			code.includes('authentication') ||
 			code.includes('oauth') ||
 			code.includes('account_not_active') ||
-			/invalid[_ ]grant|device auth|authorization code|not authorized|expired/i.test(message)
+			code.includes('invalid_account_credentials') ||
+			code.includes('invalid_exchange') ||
+			/invalid[_ ]grant|device auth|authorization code|not authorized|expired|credentials you are using are invalid/i.test(message)
 		);
 	}
 

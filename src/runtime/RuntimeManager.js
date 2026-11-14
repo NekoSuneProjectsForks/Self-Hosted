@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
 	DEFAULT_LOCAL_CATEGORY_ID,
+	clearAuthorizationCodeForUser,
 	getPlainConfig,
 	normalizePlatform,
 	saveDeviceAuthForUser,
@@ -13,6 +14,7 @@ import { BotLog, FriendMessage, pruneLogs } from '../models/index.js';
 import { closeActiveSessions, recordBotSnapshot } from '../services/sessionHistory.js';
 import { closeMatchRound, openMatchRound } from '../services/matchTracker.js';
 import {
+	clearBotAccountCode,
 	getBotAccount,
 	listBotAccounts,
 	sanitizeAccount,
@@ -459,6 +461,10 @@ export class RuntimeManager {
 			runtime.startedAt = null;
 			runtime.lastError = error.message;
 			this.appendLog(userId, `Start failed: ${error.message}`, 4);
+			if (error.authCodeRejected) {
+				await clearAuthorizationCodeForUser(userId).catch(() => {});
+				this.appendLog(userId, 'The rejected authorization code was removed. Paste a fresh one before starting again.', 2);
+			}
 			this.emitStatus(userId);
 			throw error;
 		}
@@ -828,6 +834,7 @@ export class RuntimeManager {
 			entry.lastError = error.message;
 			entry.startedAt = null;
 			this.appendLog(userId, `[${account.label}] Start failed: ${error.message}`, 4);
+			if (error.authCodeRejected) await clearBotAccountCode(userId, account.id).catch(() => {});
 			throw error;
 		} finally {
 			this.emitHelpers(userId);

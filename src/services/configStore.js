@@ -129,6 +129,28 @@ export function extractAuthorizationCode(value) {
 	return text;
 }
 
+/**
+ * Epic authorization codes are 32 hex characters. Catch the usual mistakes
+ * (an eg1~ access token, a URL that isn't the redirect, half a copy) at save
+ * time instead of sending them to Epic and getting "credentials are invalid".
+ */
+export function assertAuthorizationCode(code) {
+	if (!code || /^[0-9a-f]{32}$/i.test(code)) return code;
+	const hint = /^eg1~/i.test(code)
+		? 'That is an access token, not an authorization code.'
+		: `It should be 32 letters and numbers; this is ${code.length} characters.`;
+	const error = new Error(
+		`That doesn't look like an Epic authorization code. ${hint} Press "Sign in with Epic / get code" and either sign in with Epic directly, or paste the authorizationCode value or the whole page.`
+	);
+	error.status = 400;
+	throw error;
+}
+
+export async function clearAuthorizationCodeForUser(userId) {
+	const row = await BotConfig.findOne({ where: { userId } });
+	if (row) await row.update({ authorizationCodeEncrypted: null });
+}
+
 export function normalizePlatform(value, fallback = DEFAULT_CONFIG.platform) {
 	const platform = cleanText(value, fallback).toUpperCase();
 	return SUPPORTED_PLATFORMS.has(platform) ? platform : fallback;
@@ -250,7 +272,7 @@ export async function upsertPlainConfig(userId, payload) {
 		authorizationCode:
 			payload.authorizationCode === undefined || payload.authorizationCode === ''
 				? current.authorizationCode
-				: extractAuthorizationCode(payload.authorizationCode),
+				: assertAuthorizationCode(extractAuthorizationCode(payload.authorizationCode)),
 		categories: cleanText(payload.categories, current.categories),
 		bots: cleanText(payload.bots, current.bots),
 		releaseChannel: normalizeReleaseChannel(payload.releaseChannel ?? current.releaseChannel),

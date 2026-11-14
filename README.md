@@ -115,7 +115,8 @@ Authorization code deleted
 Every later start reuses the stored device auth automatically.
 
 - **Use a dummy Epic account, never your main.** A bot account carries a high risk of being banned if it is abused. The **Get code from Epic** button shows this warning, and you must confirm it before the link opens or can be copied.
-- Get a one-time authorization code from Epic, paste it into **Config**, and start the bot. Paste the bare code, the whole JSON page Epic shows, or the redirect URL; the code is pulled out of any of them.
+- **Sign in with Epic (recommended):** press **Sign in with Epic / get code**, tick the dummy-account warning, and sign in on Epic's own page with the account's email and password. Epic handles captcha and 2FA. The dashboard never sees the password; it gets a device auth back and saves it encrypted. There's nothing to copy. This works for the main bot, for new extra bots, and for signing an extra bot in again. Plain email/password login isn't offered, because Epic blocks it for game clients (captcha) and storing passwords would be a liability.
+- Or get a one-time authorization code from Epic, paste it into **Config**, and start the bot. Paste the bare code, the whole JSON page Epic shows, or the redirect URL; the code is pulled out of any of them.
 - The code is single-use, never logged, never returned by any API, and is deleted once device auth exists.
 - Device auth secrets are encrypted at rest and are never sent to the browser.
 
@@ -399,7 +400,14 @@ Pterodactyl, enable the egg's git-pull-on-start option. The workflow needs
 ## Troubleshooting
 
 **"Authentication Required"** — the stored device auth was rejected. Clear it and
-use a new one-time authorization code.
+sign in again.
+
+**"Sorry the account credentials you are using are invalid"** — Epic rejected the
+one-time authorization code: it was already used, it expired (codes last about 5
+minutes), or what was pasted wasn't the `authorizationCode`. The dead code is now
+removed automatically. Use **Sign in with Epic**, or get a fresh code and start
+straight away. Codes that obviously aren't codes, such as an `eg1~` access token,
+are refused when you save them.
 
 **"No bot runtime is online. Start the bot first." (409)** — a live action was
 attempted while the bot was offline. This is deliberate: the dashboard refuses

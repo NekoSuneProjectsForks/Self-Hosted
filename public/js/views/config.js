@@ -41,7 +41,7 @@ export function renderConfig() {
 					<span class="label">One-time Epic Authorization Code</span>
 					<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="${config.authorizationCodeConfigured ? 'Saved authorization code pending use' : config.deviceAuthConfigured ? 'Signed in. Paste a new code only to switch account' : 'Paste the code, or the whole page Epic shows'}" />
 						<span class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-							${epicCodeButton(config.deviceAuthConfigured ? 'Get a new code from Epic' : 'Get code from Epic')}
+							${epicCodeButton(config.deviceAuthConfigured ? 'Sign in with a different account' : 'Sign in with Epic / get code', 'main')}
 							Use a <strong class="text-red-300">dummy account</strong>, never your main. Paste the <code>authorizationCode</code> or the whole page. It works once and expires in a few minutes.
 						</span>
 					</label>

@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 95/95 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 101/101 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -189,3 +189,7 @@ modules plus a 167-line wiring file.
 - [x] Per-bot platform for extra bots (or the main bot's), with readable platform names everywhere; `BotAccounts.platform` migration
 - [x] "Get code from Epic" opens a dummy-account warning; Open/Copy only unlock after ticking it
 - [x] Auth code fields accept the bare code, Epic's whole JSON page, or the redirect URL
+- [x] Sign in with Epic: OAuth device-code flow (user signs in on Epic's page) → device auth, for main / new / existing extra bots
+- [x] "Credentials invalid" on a code: clear error, dead code auto-removed, auth banner shows the real reason; obviously wrong pastes (eg1~ tokens, wrong length) refused at save
+- [ ] Not adopted: ThisNils/node-epicgames-client-deviceauth-adapter. It does exchange code → device auth for the old epicgames-client; the same step is built into Sign in with Epic.
+- [!] Needs a real test: Sign in with Epic end to end against Epic

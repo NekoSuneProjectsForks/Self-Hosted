@@ -78,7 +78,7 @@ function accountCard(account) {
 					</select>
 					<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="New one-time authorization code" />
 					<div class="flex flex-wrap gap-2">
-						${epicCodeButton('Get code')}
+						${epicCodeButton('Sign in again', account.id)}
 						<button class="btn-secondary" type="submit">${icon('save')} Save</button>
 						<button class="btn-secondary" type="button" data-action="botacc-clear-auth" data-account-id="${id}">${icon('key-round')} Clear login</button>
 						<button class="btn-danger" type="button" data-action="botacc-delete" data-account-id="${id}">${icon('trash-2')} Remove</button>
@@ -107,7 +107,7 @@ function addForm() {
 				<button class="btn-primary" type="submit" ${full ? 'disabled' : ''}>${icon('plus')} Add</button>
 			</form>
 			<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-				${epicCodeButton()}
+				${epicCodeButton('Sign in with Epic / get code', 'new')}
 				${state.botAccounts.length}/${state.maxBotAccounts} extra bots
 			</div>
 		</section>

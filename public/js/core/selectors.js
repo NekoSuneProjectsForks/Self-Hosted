@@ -54,9 +54,12 @@ export function authRequiredBanner() {
 		<div class="mb-4 flex flex-col gap-3 rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-amber-100 sm:flex-row sm:items-center sm:justify-between">
 			<div>
 				<p class="font-semibold">Authentication Required</p>
-				<p class="text-sm text-amber-200/90">The stored Epic device auth was rejected. Clear it and sign in again with a new one-time authorization code.</p>
+				<p class="text-sm text-amber-200/90">${escapeHtml(state.runtime?.lastError || 'Epic rejected the login. Sign in again.')}</p>
 			</div>
-			<button class="btn-secondary shrink-0" data-action="clear-device-auth">${icon('key-round')} Clear Device Auth</button>
+			<div class="flex shrink-0 flex-wrap gap-2">
+				<button class="btn-primary" data-action="epic-code-prompt" data-epic-target="main">${icon('log-in')} Sign in again</button>
+				${state.config?.deviceAuthConfigured ? `<button class="btn-secondary" data-action="clear-device-auth">${icon('key-round')} Clear Device Auth</button>` : ''}
+			</div>
 		</div>`;
 }
 

@@ -25,6 +25,9 @@ export const state = {
 	// "Use a dummy account" warning shown before opening Epic's code page.
 	epicCodePrompt: false,
 	epicCodeAck: false,
+	epicCodeTarget: 'main', // 'main', 'new' or a bot account id
+	epicCodeLabel: '',
+	epicLogin: null, // active Sign in with Epic: { loginId, userCode, url, status }
 	quickCommands: [],
 	userSearchResults: [],
 	itemSearchResults: [],
