@@ -166,7 +166,71 @@ function settingsPanel() {
 	`;
 }
 
+/** Local engine locked to admins (Admin → Server)? */
+export function localLocked() {
+	return state.serverInfo?.localEngineAdminOnly !== false && state.user?.role !== 'admin';
+}
+
+/** Community listing: each bot Public (on /community) or Private. */
+function communityPanel() {
+	const data = state.listings;
+	const bots = data?.bots || [];
+	const row = (bot) => `
+		<div class="card grid gap-2">
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<div class="min-w-0">
+					<p class="truncate font-semibold">${escapeHtml(bot.name)}</p>
+					<p class="text-xs text-zinc-500">${escapeHtml(bot.note)}${bot.online ? ' · online' : ''}</p>
+				</div>
+				<div class="flex rounded-lg border border-white/10 p-0.5 text-xs" role="group" aria-label="Visibility">
+					<button class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ${!bot.isPublic ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}" data-action="listing-visibility" data-engine="${escapeHtml(bot.engine)}" data-key="${escapeHtml(bot.botKey)}" data-name="${escapeHtml(bot.name)}" data-public="false">${icon('lock', 'h-3.5 w-3.5')} Private</button>
+					<button class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ${bot.isPublic ? 'bg-fnlb-500/20 text-fnlb-200' : 'text-zinc-400 hover:text-zinc-200'}" data-action="listing-visibility" data-engine="${escapeHtml(bot.engine)}" data-key="${escapeHtml(bot.botKey)}" data-name="${escapeHtml(bot.name)}" data-public="true">${icon('globe', 'h-3.5 w-3.5')} Public</button>
+				</div>
+			</div>
+			${
+				bot.isPublic
+					? `<form class="flex gap-2" data-form="listing-desc">
+						<input type="hidden" name="engine" value="${escapeHtml(bot.engine)}" />
+						<input type="hidden" name="botKey" value="${escapeHtml(bot.botKey)}" />
+						<input class="input py-1.5 text-sm" name="description" maxlength="160" placeholder="Short note for the community (optional), e.g. Zero Build bot lobbies, EU" value="${escapeHtml(bot.description)}" />
+						<button class="btn-secondary shrink-0" type="submit">${icon('save')} Save</button>
+					</form>`
+					: ''
+			}
+		</div>`;
+	return `
+		<section class="shell-panel rounded-xl p-4">
+			<div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+				<div>
+					<p class="flex items-center gap-2 font-semibold">${icon('globe')} Community listing</p>
+					<p class="mt-1 text-sm text-zinc-500"><b>Public</b> bots appear on the <a class="text-fnlb-300 underline" href="/community" target="_blank" rel="noopener">community page</a> (no login needed), so anyone can add them and use them in a party. <b>Private</b> bots are yours only. The page only shows the name, status and your note: nobody else gets your friends, DMs, skins or settings.</p>
+				</div>
+				<a class="btn-secondary" href="/community" target="_blank" rel="noopener">${icon('external-link')} Open page</a>
+			</div>
+			${data?.fnlbError ? `<p class="mb-2 text-sm text-amber-200">${escapeHtml(data.fnlbError)}</p>` : ''}
+			${
+				!data
+					? '<p class="text-sm text-zinc-500">Loading…</p>'
+					: bots.length
+						? `<div class="grid gap-2 lg:grid-cols-2">${bots.map(row).join('')}</div>`
+						: `<p class="text-sm text-zinc-500">No bots to list yet. ${localLocked() ? 'Add your FNLB API token in Advanced settings so your FNLB bots show here.' : 'Sign in a bot, or add your FNLB API token.'}</p>`
+			}
+		</section>`;
+}
+
+function lockedPanel() {
+	return `
+		<section class="shell-panel rounded-xl p-4">
+			<p class="flex items-center gap-2 font-semibold">${icon('lock')} Local engine: admins only for now</p>
+			<p class="mt-1 text-sm text-zinc-500">The local engine and extra bots are being tested and can't do bot lobbies yet. Use the <b>Legacy FNLB</b> engine (Advanced settings) for your bots; friends, DMs and skins all work there.</p>
+			<button class="btn-secondary mt-3" data-action="bot-settings" data-bot-key="main" data-tab="advanced">${icon('sliders-horizontal')} Advanced settings</button>
+		</section>`;
+}
+
 export function renderBotLobby() {
+	if (localLocked()) {
+		return `<div class="grid gap-4">${lockedPanel()}${communityPanel()}</div>`;
+	}
 	const accounts = state.botAccounts || [];
 	const online = accounts.filter((account) => account.status === 'online').length;
 	const mainOnline = runtimeOnline() && usingLocalFnbr();
@@ -198,6 +262,7 @@ export function renderBotLobby() {
 				${accounts.map(accountTile).join('')}
 			</div>
 
+			${communityPanel()}
 			${addForm()}
 			${settingsPanel()}
 		</div>

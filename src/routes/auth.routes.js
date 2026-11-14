@@ -37,7 +37,11 @@ export function registerAuthRoutes(ctx) {
 		'/api/server-info',
 		asyncRoute(async (_req, res) => {
 			const options = await getServerOptions();
-			return res.json({ registrationOpen: options.registrationOpen, announcement: options.announcement || '' });
+			return res.json({
+				registrationOpen: options.registrationOpen,
+				announcement: options.announcement || '',
+				localEngineAdminOnly: options.localEngineAdminOnly !== false
+			});
 		})
 	);
 

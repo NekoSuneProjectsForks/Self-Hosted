@@ -16,6 +16,7 @@ import {
 	loadTracked,
 	loadMe,
 	loadServerInfo,
+	loadListings,
 	loadMessages,
 	loadParty,
 	loadQuickCommands,
@@ -83,6 +84,7 @@ document.addEventListener('click', async (event) => {
 				state.lobbySettings = (await api('/api/bot-lobby/settings').catch(() => null))?.settings || state.lobbySettings;
 			}
 			if (view === 'lobby') await loadParty(false);
+			if (view === 'bots' || view === 'botlobby') loadListings().catch(() => {});
 			if (view === 'bots' || view === 'botlobby') {
 				await Promise.all([
 					loadBotAccounts(false),
@@ -290,6 +292,16 @@ document.addEventListener('click', async (event) => {
 		}
 		if (action === 'refresh-matches') {
 			await Promise.allSettled([loadMatches(false), loadTracked(false)]);
+			render();
+			return;
+		}
+		if (action === 'listing-visibility') {
+			const makePublic = button.dataset.public === 'true';
+			state.listings = await api('/api/listings', {
+				method: 'PUT',
+				body: { engine: button.dataset.engine, botKey: button.dataset.key, displayName: button.dataset.name, isPublic: makePublic }
+			});
+			setToast(makePublic ? 'Published: the bot is on the community page.' : 'Private: the bot is off the community page.');
 			render();
 			return;
 		}
@@ -672,6 +684,15 @@ document.addEventListener('submit', async (event) => {
 		state.busy = true;
 
 		// ---- live social / lobby forms (none of these need a restart) ----
+		if (form.dataset.form === 'listing-desc') {
+			state.listings = await api('/api/listings', {
+				method: 'PUT',
+				body: { engine: data.engine, botKey: data.botKey, description: data.description }
+			});
+			setToast('Note saved.');
+			render();
+			return;
+		}
 		if (form.dataset.form === 'admin-tracker') {
 			const body = {
 				intervalMinutes: Number(data.intervalMinutes),
@@ -1232,6 +1253,13 @@ async function handleAdminPanelAction(action, button) {
 		const result = await api('/api/admin/server', { method: 'PATCH', body: { registrationOpen: button.dataset.open === 'true' } });
 		state.adminServer = result.options;
 		setToast(result.options.registrationOpen ? 'Registration is open.' : 'Registration is closed.');
+	}
+	if (action === 'admin-local-engine') {
+		const adminOnly = button.dataset.adminOnly === 'true';
+		const result = await api('/api/admin/server', { method: 'PATCH', body: { localEngineAdminOnly: adminOnly } });
+		state.adminServer = result.options;
+		state.serverInfo = { ...(state.serverInfo || {}), localEngineAdminOnly: result.options.localEngineAdminOnly };
+		setToast(adminOnly ? 'Local engine: admins only.' : 'Local engine: open to everyone.');
 	}
 	if (action === 'admin-announcement-clear') {
 		const result = await api('/api/admin/server', { method: 'PATCH', body: { announcement: '' } });

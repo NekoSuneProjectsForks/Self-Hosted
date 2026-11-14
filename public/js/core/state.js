@@ -54,6 +54,7 @@ export const state = {
 	adminServer: null,
 	adminSearch: '',
 	adminTempPassword: null,
+	listings: null, // { bots: [{ engine, botKey, name, isPublic, description }], fnlbError }
 	serverInfo: null, // { announcement, registrationOpen }
 	// Live lobby / social state, kept per running bot and refreshed by Socket.IO
 	// events rather than by reloading the whole dashboard.

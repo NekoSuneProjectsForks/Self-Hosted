@@ -35,6 +35,7 @@ const config = {
 describe('graceful shutdown', () => {
 	it('stops every running runtime', async () => {
 		const manager = new RuntimeManager(fakeIo());
+		manager.engineAccess = async () => true;
 		manager.appendLog = () => {};
 
 		const adapters = [];
@@ -61,6 +62,7 @@ describe('graceful shutdown', () => {
 
 	it('clears the restart timer on stop so nothing fires after shutdown', async () => {
 		const manager = new RuntimeManager(fakeIo());
+		manager.engineAccess = async () => true;
 		manager.appendLog = () => {};
 		manager.createAdapter = () => new StoppableAdapter();
 
@@ -73,6 +75,7 @@ describe('graceful shutdown', () => {
 
 	it('is safe to call when nothing is running', async () => {
 		const manager = new RuntimeManager(fakeIo());
+		manager.engineAccess = async () => true;
 		manager.appendLog = () => {};
 		await manager.stopAll();
 		await manager.stop('never-started');

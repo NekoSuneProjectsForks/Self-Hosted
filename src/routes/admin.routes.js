@@ -5,6 +5,7 @@ import { Op } from 'sequelize';
 import {
 	BotAccount,
 	BotConfig,
+	BotListing,
 	BotLog,
 	BotSession,
 	FriendMessage,
@@ -325,7 +326,7 @@ export function registerAdminRoutes(ctx) {
 			await runtime.stop(user.id, 'Account deleted by an admin.').catch(() => {});
 			await runtime.stopHelpers(user.id, 'Account deleted by an admin.').catch(() => {});
 			// SQLite may not enforce the FK cascades, so remove the user's rows explicitly.
-			for (const model of [TrackedPlayer, MatchRound, BotAccount, FriendMessage, QuickCommand, BotLog, ReplayUpload, BotSession, PasswordReset, BotConfig]) {
+			for (const model of [BotListing, TrackedPlayer, MatchRound, BotAccount, FriendMessage, QuickCommand, BotLog, ReplayUpload, BotSession, PasswordReset, BotConfig]) {
 				if (model?.rawAttributes?.userId) await model.destroy({ where: { userId: user.id } }).catch(() => {});
 			}
 			await user.destroy();

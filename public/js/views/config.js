@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 import { epicCodeButton, platformLabel, platformOptions } from '../core/platforms.js';
-import { addForm } from './botlobby.js';
+import { addForm, localLocked } from './botlobby.js';
 import { escapeHtml, icon, statusBadge } from '../core/ui.js';
 
 // Browsers and password managers autofill any password field, which would
@@ -29,7 +29,9 @@ export function renderConfigForm() {
 
 export function renderConfig({ withAccounts = true } = {}) {
 	const config = state.config || {};
-	const engine = config.runtimeMode === 'fnlb' ? 'fnlb' : 'fnbr';
+	const locked = localLocked();
+	// While the local engine is admin-only, non-admins work with Legacy FNLB.
+	const engine = locked || config.runtimeMode === 'fnlb' ? 'fnlb' : 'fnbr';
 	const fnbr = engineOnly('fnbr', engine);
 	const fnlb = engineOnly('fnlb', engine);
 	return `
@@ -39,9 +41,10 @@ export function renderConfig({ withAccounts = true } = {}) {
 					<label class="md:col-span-2">
 						<span class="label">Bot Engine</span>
 						<select class="input" name="runtimeMode" data-action="config-engine">
-							<option value="fnbr" ${config.runtimeMode !== 'fnlb' ? 'selected' : ''}>Local fnbr.js bot system</option>
-							<option value="fnlb" ${config.runtimeMode === 'fnlb' ? 'selected' : ''}>Legacy FNLB cloud API/runtime</option>
+							<option value="fnbr" ${engine === 'fnbr' ? 'selected' : ''} ${locked ? 'disabled' : ''}>Local fnbr.js bot system${locked ? ' (admins only for now)' : ''}</option>
+							<option value="fnlb" ${engine === 'fnlb' ? 'selected' : ''}>Legacy FNLB cloud API/runtime</option>
 						</select>
+						${locked ? '<span class="mt-1 block text-xs text-zinc-500">The local engine is admin-only while it\'s being tested. Legacy FNLB gives you bot lobbies, friends, DMs and skins.</span>' : ''}
 					</label>
 					<label class="md:col-span-2" ${fnbr}>
 					<span class="label">One-time Epic Authorization Code</span>

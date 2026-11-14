@@ -63,6 +63,7 @@ function runtimeFor(client, options = {}) {
 
 function managerWithMainAndHelper() {
 	const manager = new RuntimeManager(fakeIo());
+	manager.engineAccess = async () => true;
 	manager.appendLog = () => {};
 	manager.emitHelpers = () => {};
 

@@ -6,6 +6,7 @@ import { BotLog } from './BotLog.js';
 import './associations.js';
 import './TrackedPlayer.js';
 import './ServerSetting.js';
+import './BotListing.js';
 
 export { sequelize } from './sequelize.js';
 export { BotAccount } from './BotAccount.js';
@@ -21,6 +22,7 @@ export { SessionMedia } from './SessionMedia.js';
 export { SessionStat } from './SessionStat.js';
 export { TrackedPlayer } from './TrackedPlayer.js';
 export { ServerSetting } from './ServerSetting.js';
+export { BotListing } from './BotListing.js';
 export { User } from './User.js';
 
 export async function initDatabase() {

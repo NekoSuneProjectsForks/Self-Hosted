@@ -49,6 +49,7 @@ class FakeAdapter {
 function managerWithFake(engine = 'fnbr') {
 	const io = fakeIo();
 	const manager = new RuntimeManager(io);
+	manager.engineAccess = async () => true;
 	const adapter = new FakeAdapter(engine);
 	manager.createAdapter = () => adapter;
 	// Logging writes to the database; not needed for these tests.
@@ -204,5 +205,27 @@ describe('RuntimeManager capabilities', () => {
 		assert.equal(caps.engine, 'fnlb');
 		assert.equal(caps.capabilities.realtimeCosmetics, false, 'FNLB live cosmetics must not be claimed');
 		assert.equal(caps.capabilities.friendMessages, true, 'DMs go through the fnlb SDK bridge');
+	});
+});
+
+describe('Local engine lock (admin-only)', () => {
+	it('refuses to start the local engine for a non-admin while it is locked', async () => {
+		const { manager } = managerWithFake();
+		manager.engineAccess = async (user) => user.role === 'admin';
+		await assert.rejects(() => manager.start({ id: 'user-x', role: 'user', status: 'active' }, baseConfig), (error) => error.status === 403);
+	});
+
+	it('lets admins start it', async () => {
+		const { manager } = managerWithFake();
+		manager.engineAccess = async (user) => user.role === 'admin';
+		await manager.start({ id: 'user-a', role: 'admin', status: 'active' }, baseConfig);
+		assert.equal(manager.get('user-a').status, 'online');
+	});
+
+	it('never blocks the Legacy FNLB engine', async () => {
+		const { manager } = managerWithFake('fnlb');
+		manager.engineAccess = async () => false;
+		await manager.start({ id: 'user-f', role: 'user', status: 'active' }, { ...baseConfig, runtimeMode: 'fnlb', apiToken: 'token-1234567890' });
+		assert.equal(manager.get('user-f').status, 'online');
 	});
 });

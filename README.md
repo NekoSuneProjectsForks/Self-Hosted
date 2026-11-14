@@ -415,6 +415,35 @@ gateway servers (`fnlbgw-*.on.tnfangel.net`). The local engine has no such
 gateway and can't make the signed ticket request a real client makes. That's
 why bot lobbies need the Legacy FNLB engine.
 
+## Community bots (public list)
+
+**`/community`** is a public page (no login) listing bots their owners chose
+to share. Each member decides per bot on **Bots → Community listing**:
+
+- **Public**: shown on the community page with its name, live status
+  (Available, In a party, Offline), party size, type (FNLB bot lobby bot or
+  lobby bot) and an optional note (160 characters). Anyone can add it as a
+  friend and invite it.
+- **Private** (default): only the owner uses it.
+
+The public page is read-only. It never shows owners, emails or account IDs,
+and it has no controls: friends, DMs, skins and settings stay with the owner.
+Ownership is checked when publishing (a local bot must be your main or extra
+account; an FNLB bot must be on your FNLB token). Bots of suspended members are
+hidden. The list is cached for 20 seconds.
+
+## Local engine: admins only (for now)
+
+While the local engine can't do bot lobbies, **Admin → Server → Local engine
+access** keeps it admin-only (default). Members:
+
+- can't select or start the local engine or extra bots (403)
+- are moved to Legacy FNLB automatically while their bot is stopped
+- see a notice on the Bots page
+
+Legacy FNLB (bot lobbies, friends, DMs, skins) is not affected. Switch it to
+**Everyone** when the local engine is ready.
+
 ## Admin panel
 
 - **Overview**: members, bots online, tracked players, matches today, server
@@ -428,7 +457,8 @@ why bot lobbies need the Legacy FNLB engine.
 - **Tracker**: the server tracker bot: sign in or out, start/stop, start with
   the server, check interval, platform, check everyone now, live log.
 - **Server**: open or close registration (the first account can always be
-  created), and an announcement banner shown to every member.
+  created), an announcement banner shown to every member, local engine access
+  (admins only or everyone), and Stop all bots.
 
 ## Engine capabilities
 

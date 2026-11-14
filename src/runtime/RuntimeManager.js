@@ -15,7 +15,7 @@ import { closeActiveSessions, recordBotSnapshot } from '../services/sessionHisto
 import { closeMatchRound, openMatchRound } from '../services/matchTracker.js';
 import { pollUserPlayers, usersWithTrackedPlayers } from '../services/playerTracker.js';
 import { recordFnlbMatchmaking } from '../services/fnlbQueues.js';
-import { getTrackerSettings, updateTrackerSettings } from '../services/serverSettings.js';
+import { getTrackerSettings, localEngineAllowed, updateTrackerSettings } from '../services/serverSettings.js';
 import { trackerCategory } from './LocalFnbrRuntime.js';
 
 export const SERVER_TRACKER_ID = 'server-tracker';
@@ -179,6 +179,8 @@ const OFFLINE_CAPABILITIES = {
 export class RuntimeManager {
 	constructor(io) {
 		this.io = io;
+		// Who may run the local engine (Admin → Server). Replaceable in tests.
+		this.engineAccess = localEngineAllowed;
 		this.runtimes = new Map();
 		// userId -> Map(botAccountId -> extra bot entry). Extra bots are always
 		// local fnbr clients and run independently of the main runtime.
@@ -443,6 +445,9 @@ export class RuntimeManager {
 			throw runtimeError(403, 'This account is suspended and cannot start a bot.');
 		}
 
+		if (plainConfig?.runtimeMode !== 'fnlb' && !(await this.engineAccess(user))) {
+			throw runtimeError(403, 'The local engine is admin-only for now. Switch to the Legacy FNLB engine in Bots → Advanced.');
+		}
 		const startConfig = validateStartConfig(plainConfig);
 		runtime.startConfig = { ...plainConfig, ...startConfig };
 		runtime.configuredMode = plainConfig.runtimeMode;
@@ -613,6 +618,47 @@ export class RuntimeManager {
 			...helperUsers.map((userId) => this.stopHelpers(userId)),
 			this.serverTracker?.adapter ? this.stopServerTracker('Server shutting down.') : null
 		]);
+	}
+
+	/**
+	 * Live, public-safe status of one of a user's bots for the community list:
+	 * { displayName, status: available|busy, partySize, partyMax, platform }, or
+	 * null when it isn't running. "busy" = someone else is in its party.
+	 */
+	publicBotStatus(userId, engine, botKey) {
+		if (engine === 'fnbr') {
+			const adapter = this.localAdapters(userId).find((row) => !row.isTracker?.() && row.botId?.() === botKey);
+			const client = adapter?.client;
+			if (!client?.isReady) return null;
+			const size = client.party?.size ?? 1;
+			return {
+				displayName: client.user?.self?.displayName || null,
+				status: size > 1 ? 'busy' : 'available',
+				partySize: size,
+				partyMax: client.party?.maxSize ?? 16,
+				platform: adapter.startConfig?.platform || null
+			};
+		}
+		if (engine === 'fnlb') {
+			const adapter = this.get(userId).adapter;
+			if (adapter?.engine !== 'fnlb') return null;
+			const bot = adapter.manager?.bots?.cache?.get?.(botKey);
+			if (!bot?.ready) return null;
+			let size = null;
+			try {
+				size = bot.party?.members?.size ?? null;
+			} catch {
+				size = null;
+			}
+			return {
+				displayName: bot.displayName || null,
+				status: size && size > 1 ? 'busy' : 'available',
+				partySize: size,
+				partyMax: 16,
+				platform: null
+			};
+		}
+		return null;
 	}
 
 	/** Admin view: every running bot on the server (main + extra) with its owner. */
@@ -858,6 +904,9 @@ export class RuntimeManager {
 	async startHelper(user, accountRowId) {
 		const userId = user.id;
 		if (user.status === 'suspended') throw runtimeError(403, 'This account is suspended and cannot start a bot.');
+		if (!(await this.engineAccess(user))) {
+			throw runtimeError(403, 'Extra bots use the local engine, which is admin-only for now.');
+		}
 		const account = await getBotAccount(userId, accountRowId);
 		const entry = this.helperEntry(userId, account);
 		if (this.isHelperRunning(entry)) throw runtimeError(409, `${account.label} is already running.`);

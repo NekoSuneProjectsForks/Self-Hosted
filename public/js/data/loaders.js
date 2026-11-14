@@ -65,6 +65,16 @@ export async function loadAdmin() {
 	state.adminServer = server?.options || null;
 }
 
+/** The user's bots with their community Public/Private choice. */
+export async function loadListings(shouldRender = true) {
+	try {
+		state.listings = await api('/api/listings');
+	} catch (error) {
+		state.listings = { bots: [], fnlbError: error.message };
+	}
+	if (shouldRender) render();
+}
+
 /** Public server info: the admin's announcement banner and registration state. */
 export async function loadServerInfo() {
 	try {

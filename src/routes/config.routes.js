@@ -1,7 +1,8 @@
 import { BotLog } from '../models/index.js';
 import { getPlainConfig, sanitizeConfig, updateMainBotSettings, upsertPlainConfig } from '../services/configStore.js';
-import { asyncRoute } from '../http/helpers.js';
+import { httpError, asyncRoute } from '../http/helpers.js';
 
+import { localEngineAllowed } from '../services/serverSettings.js';
 export function registerConfigRoutes(ctx) {
 	const { app, runtime, requireAuth, requireActive, requireAdmin, io } = ctx;
 
@@ -26,7 +27,13 @@ export function registerConfigRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
-			const config = await getPlainConfig(req.user.id);
+			let config = await getPlainConfig(req.user.id);
+			// Local engine is admin-only: move members still on it (new accounts
+			// default to it) over to Legacy FNLB while their bot is stopped.
+			if (config.runtimeMode !== 'fnlb' && !runtime.isRunning(req.user.id) && !(await localEngineAllowed(req.user))) {
+				config = await upsertPlainConfig(req.user.id, { runtimeMode: 'fnlb' });
+				await runtime.applySavedConfig(req.user.id, config).catch(() => {});
+			}
 			return res.json({
 				user: req.user.toSafeJSON(),
 				config: sanitizeConfig(config),
@@ -40,6 +47,9 @@ export function registerConfigRoutes(ctx) {
 		requireAuth,
 		requireActive,
 		asyncRoute(async (req, res) => {
+			if (req.body?.runtimeMode === 'fnbr' && !(await localEngineAllowed(req.user))) {
+				throw httpError(403, 'The local engine is admin-only for now. Use the Legacy FNLB engine.');
+			}
 			const config = await upsertPlainConfig(req.user.id, req.body);
 			// Applies everything that can be applied live and only flags a restart
 			// for settings that genuinely need one. Changing the engine while online

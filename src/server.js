@@ -23,6 +23,7 @@ import { registerLegacyRoutes } from './routes/legacy.routes.js';
 import { registerQuickCommandRoutes } from './routes/quickCommands.routes.js';
 import { registerUploadRoutes } from './routes/uploads.routes.js';
 import { registerTrackedPlayerRoutes } from './routes/trackedPlayers.routes.js';
+import { registerListingRoutes } from './routes/listings.routes.js';
 
 function createUploaders() {
 	const upload = multer({
@@ -136,6 +137,7 @@ export async function createServer() {
 	registerLegacyRoutes(ctx);
 	registerUploadRoutes(ctx);
 	registerTrackedPlayerRoutes(ctx);
+	registerListingRoutes(ctx);
 	registerAdminRoutes(ctx);
 
 	io.engine.use(sessionMiddleware);

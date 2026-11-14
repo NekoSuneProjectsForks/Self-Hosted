@@ -288,6 +288,14 @@ function renderServer() {
 				</form>
 			</section>
 			<section class="shell-panel rounded-lg p-4 lg:col-span-2">
+				<h2 class="flex items-center gap-2 font-semibold">${icon('cpu')} Local engine access</h2>
+				<p class="mt-1 text-sm text-zinc-400">While the local engine can't do bot lobbies, keep it for admins. Members then use Legacy FNLB (bot lobbies, friends, DMs and skins are unaffected). Admins can always use both.</p>
+				<div class="mt-3 flex items-center gap-3">
+					${statusBadge(options.localEngineAdminOnly === false ? 'online' : 'offline', options.localEngineAdminOnly === false ? 'Everyone' : 'Admins only')}
+					<button class="btn-secondary" data-action="admin-local-engine" data-admin-only="${options.localEngineAdminOnly === false ? 'true' : 'false'}">${icon(options.localEngineAdminOnly === false ? 'lock' : 'lock-open')} ${options.localEngineAdminOnly === false ? 'Make admins only' : 'Open to everyone'}</button>
+				</div>
+			</section>
+			<section class="shell-panel rounded-lg p-4 lg:col-span-2">
 				<h2 class="flex items-center gap-2 font-semibold">${icon('octagon-x')} Emergency</h2>
 				<p class="mt-1 text-sm text-zinc-400">Stops every member's main and extra bots right away (the server tracker keeps running).</p>
 				<button class="btn-danger mt-3" data-action="admin-stop-all">${icon('octagon-x')} Stop all bots</button>

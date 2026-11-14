@@ -14,7 +14,7 @@ export const TRACKER_INTERVALS = [1, 2, 5, 10, 15];
 
 const DEFAULTS = {
 	tracker: { deviceAuth: null, authorizationCode: '', displayName: null, autoStart: true, intervalMinutes: 2, platform: 'WIN' },
-	server: { registrationOpen: true, announcement: '' }
+	server: { registrationOpen: true, announcement: '', localEngineAdminOnly: true }
 };
 
 const cache = new Map();
@@ -99,5 +99,12 @@ export async function updateServerOptions(patch = {}) {
 	const next = { ...current };
 	if (patch.registrationOpen !== undefined) next.registrationOpen = Boolean(patch.registrationOpen);
 	if (patch.announcement !== undefined) next.announcement = String(patch.announcement || '').trim().slice(0, 500);
+	if (patch.localEngineAdminOnly !== undefined) next.localEngineAdminOnly = Boolean(patch.localEngineAdminOnly);
 	return write('server', next);
+}
+
+/** Local fnbr engine is admin-only while it can't matchmake (default on). */
+export async function localEngineAllowed(user) {
+	if (user?.role === 'admin') return true;
+	return (await getServerOptions()).localEngineAdminOnly === false;
 }
