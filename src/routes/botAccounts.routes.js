@@ -10,12 +10,12 @@ import { asyncRoute, httpError } from '../http/helpers.js';
 import { getPlainConfig, updateLocalCategoryConfig } from '../services/configStore.js';
 import { normalizeBuildId } from '../runtime/LocalFnbrRuntime.js';
 
-const LOBBY_SETTINGS = ['autoReady', 'mirrorLeader', 'leaveWhenQueueStarts', 'leaveOnMatchStart', 'rejoinAfterMatch', 'botsSitOut', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
+const LOBBY_SETTINGS = ['autoReady', 'mirrorLeader', 'leaveWhenQueueStarts', 'followLeaderQueue', 'leaveOnMatchStart', 'rejoinAfterMatch', 'botsSitOut', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
 
 function settingsOf(config = {}) {
 	const seconds = Number(config.emoteSeconds);
 	return {
-		...Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, ['botsSitOut', 'leaveWhenQueueStarts'].includes(key) ? config[key] === true : config[key] !== false])),
+		...Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, ['botsSitOut', 'leaveWhenQueueStarts', 'followLeaderQueue'].includes(key) ? config[key] === true : config[key] !== false])),
 		emoteSeconds: Number.isFinite(seconds) ? seconds : 6,
 		partyBuildId: config.partyBuildId || ''
 	};

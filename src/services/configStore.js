@@ -21,6 +21,7 @@ const DEFAULT_LOCAL_CATEGORY = {
 		leaveOnMatchStart: true,
 		mirrorLeader: true,
 		leaveWhenQueueStarts: false,
+		followLeaderQueue: false,
 		rejoinAfterMatch: true,
 		autoReady: true,
 		partyCommands: true,

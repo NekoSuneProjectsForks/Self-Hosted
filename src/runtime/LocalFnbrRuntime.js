@@ -135,6 +135,24 @@ const EMPTY_MATCHMAKING_DATA = {
 	'Default:MatchmakingData2_j': JSON.stringify({ MatchmakingData2: { groupMemberData: EMPTY_GROUP_MEMBER_DATA, islandSelection: EMPTY_ISLAND_SELECTION, priority: 1 } })
 };
 
+/**
+ * Experimental "follow the leader's queue": the progress fields of the
+ * leader's groupMemberData that the bot echoes into its OWN slot. Never the
+ * IDs that name a match or session (worldSessionId, matchmakingId, the
+ * island selection), which is what crashed the leader's PS5 when the whole
+ * record was copied.
+ */
+const FOLLOWED_GROUP_FIELDS = ['iD', 'schemaId', 'barrierBits', 'state', 'result', 'failReason', 'timedOutBarrierIndex', 'matchmakingDelay', 'playlistVersion', 'hiddenMatchmakingDelayMax'];
+
+/** The bot's MatchmakingData1 value for a leader groupMemberData (idle slot if not queueing). */
+export function followedMatchmakingData(leaderGroup) {
+	const group = { ...EMPTY_GROUP_MEMBER_DATA };
+	if (leaderGroup?.iD) {
+		for (const field of FOLLOWED_GROUP_FIELDS) if (leaderGroup[field] !== undefined) group[field] = leaderGroup[field];
+	}
+	return JSON.stringify({ MatchmakingData1: { groupMemberData: group, islandSelection: EMPTY_ISLAND_SELECTION, priority: 1 } });
+}
+
 function sameJson(a, b) {
 	return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
@@ -521,8 +539,14 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		if (leader && me && leader.id !== selfId) {
 			for (const key of MATCHMAKING_DATA_KEYS) {
 				const ours = raw(me, key);
-				if (ours && ours === raw(leader, key)) problems.push(`The bot is publishing a copy of the leader's ${key.replace('Default:', '')}. Stop and start the bot to clear it.`);
+				if (ours && ours !== EMPTY_MATCHMAKING_DATA[key] && ours === raw(leader, key)) problems.push(`The bot is publishing a copy of the leader's ${key.replace('Default:', '')}. Stop and start the bot to clear it.`);
 			}
+		}
+		const lastRow = (this.mmTimeline || [])[(this.mmTimeline || []).length - 1];
+		if (lastRow && lastRow.groupId && lastRow.leaderReady === 'Ready' && lastRow.ownerStarted !== true && !lastRow.failReason) {
+			problems.push(this.followLeaderQueue()
+				? `The leader's queue stopped at barrier ${lastRow.barrierBits} with "Follow the leader's queue" on (bot at ${lastRow.botBarrierBits ?? 'none'}).`
+				: `The leader's queue stopped at barrier ${lastRow.barrierBits} without starting. Their console waits for every member to follow the queue; try "Follow the leader's queue (experimental)" or "Step out when you ready up".`);
 		}
 
 		// Every non-cosmetic member field that differs between the bot and the leader.
@@ -1544,6 +1568,11 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		return this.startConfig.localCategory?.config?.leaveOnMatchStart !== false;
 	}
 
+	/** Experimental, off by default: echo the leader's queue progress in the bot's own slot. */
+	followLeaderQueue() {
+		return this.startConfig.localCategory?.config?.followLeaderQueue === true && !this.leaveWhenQueueStarts();
+	}
+
 	/** Fallback, off by default: step out when the leader readies, rejoin after. */
 	leaveWhenQueueStarts() {
 		return this.startConfig.localCategory?.config?.leaveWhenQueueStarts === true;
@@ -1703,7 +1732,12 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 * selection, download progress and preload flag onto the bot.
 	 */
 	async syncFromLeader() {
-		if (!this.mirrorLeaderEnabled() || this.mirroring) return false;
+		if (!this.mirrorLeaderEnabled()) return false;
+		if (this.mirroring) {
+			// A leader update arrived mid-patch: run again once it lands.
+			this.mirrorAgain = true;
+			return false;
+		}
 		const me = this.client?.party?.me;
 		const leader = this.playerLeader();
 		if (!me || !leader || !this.client?.isReady) return false;
@@ -1731,7 +1765,16 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 		// Publish the bot's own idle slot; also replaces copies an earlier
 		// version sent (they persist across parties).
+		const follow = this.followLeaderQueue();
+		if (follow) {
+			const leaderGroup = safeValue(() => leader.meta.get('Default:MatchmakingData1_j')?.MatchmakingData1?.groupMemberData, null);
+			const want = followedMatchmakingData(leaderGroup);
+			if (want !== safeValue(() => me.meta.schema?.['Default:MatchmakingData1_j'], null)) {
+				patch['Default:MatchmakingData1_j'] = me.meta.set('Default:MatchmakingData1_j', want, true);
+			}
+		}
 		for (const key of MATCHMAKING_DATA_KEYS) {
+			if (follow && key === 'Default:MatchmakingData1_j') continue;
 			const ours = safeValue(() => me.meta.schema?.[key], null);
 			if (!ours || (ours !== EMPTY_MATCHMAKING_DATA[key] && ours === safeValue(() => leader.meta.schema?.[key], null))) {
 				patch[key] = me.meta.set(key, EMPTY_MATCHMAKING_DATA[key], true);
@@ -1797,7 +1840,9 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			ownerStarted: info?.bHasOwnerStartedMM ?? null,
 			leaderReady: info?.readyStatus ?? null,
 			botReady: safeValue(() => this.client.party.me.meta.get('Default:MatchmakingInfo_j')?.MatchmakingInfo?.readyStatus, null),
-			botHasData: Boolean(safeValue(() => this.client.party.me.meta.schema?.['Default:MatchmakingData1_j'], null))
+			botHasData: Boolean(safeValue(() => this.client.party.me.meta.schema?.['Default:MatchmakingData1_j'], null)),
+			botBarrierBits: safeValue(() => this.client.party.me.meta.get('Default:MatchmakingData1_j')?.MatchmakingData1?.groupMemberData?.barrierBits, null),
+			followQueue: this.followLeaderQueue()
 		};
 		this.mmTimeline ||= [];
 		const last = this.mmTimeline[this.mmTimeline.length - 1];

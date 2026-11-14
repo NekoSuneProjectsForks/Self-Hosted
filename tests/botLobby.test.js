@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LocalFnbrRuntime, islandOf } from '../src/runtime/LocalFnbrRuntime.js';
+import { LocalFnbrRuntime, islandOf, followedMatchmakingData } from '../src/runtime/LocalFnbrRuntime.js';
 import { RuntimeManager } from '../src/runtime/RuntimeManager.js';
 
 /**
@@ -931,6 +931,24 @@ describe("copy the leader's mode (42.x lobbies)", () => {
 	function islandOfFor(member) {
 		return islandOf(member);
 	}
+});
+
+describe("Follow the leader's queue (experimental)", () => {
+	it('echoes queue progress into its own slot, never the match or session IDs', () => {
+		const leaderGroup = { iD: 'GROUP', schemaId: 2967134841, barrierBits: 268, failReason: '', timedOutBarrierIndex: 4294967295, worldSessionId: 'SESSION', matchmakingDelay: 0, playlistVersion: 0, hiddenMatchmakingDelayMax: 0, state: 1, result: 0 };
+		const data = JSON.parse(followedMatchmakingData(leaderGroup)).MatchmakingData1;
+		assert.equal(data.groupMemberData.iD, 'GROUP');
+		assert.equal(data.groupMemberData.barrierBits, 268);
+		assert.equal(data.groupMemberData.state, 1);
+		assert.equal(data.groupMemberData.worldSessionId, '', 'never the session');
+		assert.equal(data.islandSelection.matchmakingId, '', 'never the matchmaking ID');
+		assert.equal(data.priority, 1);
+	});
+	it('goes back to an idle slot when the leader is not queueing', () => {
+		const data = JSON.parse(followedMatchmakingData({ iD: '', barrierBits: 12 })).MatchmakingData1;
+		assert.equal(data.groupMemberData.iD, '');
+		assert.equal(data.groupMemberData.barrierBits, 0);
+	});
 });
 
 describe('SubGame (which part of Fortnite the member is in)', () => {
