@@ -175,6 +175,32 @@ API: `GET/PUT /api/bot-defaults`, `POST /api/bot-defaults/apply`,
 saving a default never forces a restart, and equipping is only reported as
 successful once the runtime confirms it.
 
+## Layout
+
+The sidebar is grouped:
+
+- **Dashboard**
+- **Play**: Lobby, Friends, Messages, Matches
+- **Bots**: Bots (every bot, with a settings pop-up), Locker (cosmetics, loadouts, join defaults)
+- **System**: Console (live runtime output with filters), Server Config, Categories (FNLB only), Account, Admin
+
+The top bar shows the engine and status, the **control picker** (which bot the
+live pages act on), and Start/Stop.
+
+On **Bots**, click any bot (main or extra) to open its settings pop-up:
+
+- **Overview**: status, platform, battle pass level, party, start/stop, control in Lobby, join the main lobby, leave the party
+- **Look & level**: battle pass level (with 1/50/100/200 presets), battle pass owned, banner, crowns, applied to that bot or saved as join default; **copy a player's look** from the bot's party
+- **Account**: sign in (with the dummy-account warning), platform, presence status, plus label, auto-start and remove for extra bots
+
+On **Lobby**, every other player has **Copy look to bot** (outfit, back bling,
+pickaxe, kicks, battle pass level and banner; styles can't be copied), each
+player shows their level, and the bot's own card has a quick battle pass level
+box. Players can also type `!copy` in lobby chat.
+
+`public/styles.css` is committed already built, so a host that runs
+`node index.js` without `npm run build` still gets every style.
+
 ## Bot Lobby (multiple local bots)
 
 The **Bot Lobby** page runs extra Epic accounts as their own fnbr clients next to
@@ -215,6 +241,7 @@ Friends can message any local bot (main or extra):
 | `!ready` / `!unready` / `!sitout` | Readiness |
 | `!stopemote` | Clear the emote |
 | `!status <text>` | Presence status |
+| `!copy` | Bot copies the sender's look (they must be in its party) |
 | `!level <n>` / `!crowns <n>` | Battle pass level / crowns, for this party |
 | `!stats [name]` | The sender's (or that player's) BR wins, kills, matches and K/D |
 | `!join` / `!leave` | Join the sender's party / leave the party |

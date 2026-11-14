@@ -167,7 +167,9 @@ function serializePartyMember(member) {
 		shoes: safeValue(() => member.shoes, null),
 		emote: safeValue(() => member.emote, null),
 		matchInfo: safeValue(() => member.matchInfo, null),
-		playlist: safeValue(() => member.playlist, null)
+		playlist: safeValue(() => member.playlist, null),
+		battlePassLevel: safeValue(() => member.battlepass?.passLevel ?? member.meta?.battlepass?.passLevel, null),
+		bannerId: safeValue(() => member.banner?.bannerIconId, null)
 	};
 }
 
@@ -989,6 +991,53 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		this.defaultsTimer.unref?.();
 	}
 
+	/**
+	 * Copies another party member's look onto this bot: outfit, back bling,
+	 * pickaxe, kicks, and (unless turned off) their battle pass level and banner.
+	 * Item styles aren't copied: Epic stores them in a form fnbr can't send back.
+	 * Like every live change, it lasts until the bot joins another party.
+	 */
+	async copyMember(target, { profile = true } = {}) {
+		const client = this.requireClient();
+		const value = normalizeTarget(target, 'a party member');
+		const members = collectionValues(client.party?.members);
+		const member =
+			members.find((row) => row.id === value) ||
+			members.find((row) => String(row.displayName || '').toLowerCase() === value.toLowerCase());
+		if (!member) throw runtimeError(404, 'That player is not in the bot\'s party.');
+		if (member.id === client.user.self.id) throw runtimeError(400, 'The bot cannot copy itself.');
+
+		const items = {
+			outfit: safeValue(() => member.outfit, null),
+			backpack: safeValue(() => member.backpack, null),
+			pickaxe: safeValue(() => member.pickaxe, null),
+			shoes: safeValue(() => member.shoes, null)
+		};
+		const name = member.displayName || 'that player';
+		if (!Object.values(items).some(Boolean)) throw runtimeError(409, `${name} isn't showing any cosmetics yet.`);
+		const result = await this.setLoadout(items);
+
+		let profileResult = null;
+		if (profile) {
+			const bp = safeValue(() => member.battlepass, null) || safeValue(() => member.meta?.battlepass, null);
+			const banner = safeValue(() => member.banner, null);
+			const patchProfile = {};
+			if (bp?.passLevel) {
+				patchProfile.battlePassLevel = bp.passLevel;
+				patchProfile.battlePassPurchased = Boolean(bp.bHasPurchasedPass);
+			}
+			if (banner?.bannerIconId) patchProfile.bannerId = banner.bannerIconId;
+			if (banner?.bannerColorId) patchProfile.bannerColor = banner.bannerColorId;
+			if (Object.keys(patchProfile).length) profileResult = await this.setProfile(patchProfile).catch(() => null);
+		}
+
+		return {
+			...result,
+			content: `Copied ${name}'s look (${result.applied.map((row) => row.slot).join(', ') || 'nothing'}${profileResult?.applied?.length ? ', battle pass/banner' : ''}).${result.failed.length ? ` Rejected: ${result.failed.map((row) => row.slot).join(', ')}.` : ''}`,
+			copiedFrom: { id: member.id, displayName: member.displayName || null }
+		};
+	}
+
 	/** Level, battle pass, banner and crowns, applied live to this party only. */
 	async setProfile(input = {}) {
 		const { member } = this.requireMember();
@@ -1283,6 +1332,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		if (command === '!ready') return this.setReadiness(true);
 		if (command === '!unready') return this.setReadiness(false);
 		if (command === '!sitout') return this.setSittingOut(true);
+		if (command === '!copy') return this.copyMember(authorId);
 		return undefined;
 	}
 
@@ -1394,7 +1444,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			case '!help':
 			case '!commands':
 				return reply(
-					'Commands: CID_ / BID_ / Pickaxe_ID_ / EID_ <id>, !ready, !unready, !sitout, !stopemote, !status <text>, !level <n>, !crowns <n>, !stats [name], !join, !leave'
+					'Commands: CID_ / BID_ / Pickaxe_ID_ / EID_ <id>, !ready, !unready, !sitout, !stopemote, !status <text>, !level <n>, !crowns <n>, !copy, !stats [name], !join, !leave'
 				);
 			case '!ready':
 				return attempt(() => this.setReadiness(true), 'Ready!');
@@ -1422,6 +1472,8 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				);
 			case '!leave':
 				return attempt(() => this.leaveParty(), 'Left the party.');
+			case '!copy':
+				return attempt(() => this.copyMember(friendId), (result) => result.content);
 			case '!level':
 			case '!bp':
 				if (!args) return reply('Usage: !level <number>');

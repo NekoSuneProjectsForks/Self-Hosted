@@ -24,6 +24,9 @@ export const state = {
 	lobbySettings: null,
 	// Items page: slots picked to equip together, and whether equips persist.
 	loadoutTray: {},
+	botModal: null, // Bots page settings pop-up: { key: 'main' | bot account id, tab }
+	consoleFilter: 'all',
+	consoleQuery: '',
 	botDefaults: null, // join defaults: { loadout, profile }
 	itemSearchQuery: '',
 	itemSearchType: '',

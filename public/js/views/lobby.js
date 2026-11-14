@@ -34,6 +34,8 @@ export function currentMatchState() {
 
 function memberCard(member, leaderId) {
 	const isLeader = member.isLeader || member.id === leaderId;
+	const botId = controlBotId();
+	const isThisBot = member.id === botId;
 	const cosmetics = [
 		['Outfit', member.outfit],
 		['Backpack', member.backpack],
@@ -56,6 +58,7 @@ function memberCard(member, leaderId) {
 				</div>
 			</div>
 			<dl class="mt-3 grid gap-1 text-xs text-zinc-400">
+				${member.battlePassLevel ? `<div class="flex justify-between gap-2"><dt>Level</dt><dd>${escapeHtml(String(member.battlePassLevel))}</dd></div>` : ''}
 				<div class="flex justify-between gap-2"><dt>Platform</dt><dd>${member.platform ? escapeHtml(platformLabel(member.platform)) : '-'}</dd></div>
 				${member.matchInfo?.location ? `<div class="flex justify-between gap-2"><dt>Match</dt><dd>${escapeHtml(member.matchInfo.location)}</dd></div>` : ''}
 				${cosmetics
@@ -65,6 +68,15 @@ function memberCard(member, leaderId) {
 					)
 					.join('')}
 			</dl>
+			${isThisBot && can('cosmetics')
+				? `<form class="mt-3 flex gap-2" data-form="quick-level" data-bot-id="${escapeHtml(botId)}">
+						<input class="input py-1.5" name="battlePassLevel" type="number" min="1" max="10000" placeholder="Battle pass level" />
+						<button class="btn-secondary shrink-0 py-1.5" type="submit">${icon('star')} Set</button>
+					</form>`
+				: ''}
+			${!isThisBot && can('cosmetics') && (member.outfit || member.backpack || member.pickaxe)
+				? `<button class="btn-secondary mt-3 w-full" data-action="copy-look" data-bot-id="${escapeHtml(botId)}" data-member-id="${escapeHtml(member.id)}" title="Bot copies this player's outfit, back bling, pickaxe, kicks, level and banner">${icon('copy')} Copy look to bot</button>`
+				: ''}
 			${memberStats(member)}
 			${
 				can('party') && !isLeader
@@ -179,13 +191,13 @@ function renderLobbyControls(isLeader) {
 	// with a cryptic Epic error when clicked.
 	const leaderNote = isLeader
 		? ''
-		: `<p class="mb-3 text-xs text-amber-300">${icon('triangle-alert', 'mr-1 inline h-3 w-3')} Requires Party Leader — the bot is not the leader, so the controls below are unavailable.</p>`;
+		: `<p class="mb-3 text-xs text-amber-300">${icon('triangle-alert', 'mr-1 inline h-3.5 w-3.5 align-[-2px]')} Requires Party Leader — the bot is not the leader, so the controls below are unavailable.</p>`;
 
 	return `
 		<section class="shell-panel rounded-lg p-4">
 			<p class="mb-3 font-semibold">Lobby controls</p>
 			${leaderNote}
-			${can('autoReady') ? `<p class="mb-3 text-xs text-zinc-500">${icon('check-check', 'mr-1 inline h-3 w-3')} ${state.config?.localCategory?.config?.autoReady === false ? 'Auto-ready is off.' : 'Auto-ready is on: the bots ready up once every player is ready. Players can also type <code>!ready</code> / <code>!unready</code> in lobby chat.'}</p>` : ''}
+			${can('autoReady') ? `<p class="mb-3 text-xs text-zinc-500">${icon('check-check', 'mr-1 inline h-3.5 w-3.5 align-[-2px]')} ${state.config?.localCategory?.config?.autoReady === false ? 'Auto-ready is off.' : 'Auto-ready is on: the bots ready up once every player is ready. Players can also type <code>!ready</code> / <code>!unready</code> in lobby chat.'}</p>` : ''}
 			<div class="flex flex-wrap gap-2">
 				${can('readiness') ? `
 					<button class="btn-secondary" data-action="party-ready">${icon('check')} Ready</button>

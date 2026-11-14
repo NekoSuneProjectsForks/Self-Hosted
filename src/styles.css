@@ -28,7 +28,7 @@
 	}
 
 	.card {
-		@apply rounded-lg border border-white/10 bg-white/[0.055] p-4 shadow-lg shadow-black/20;
+		@apply rounded-xl border border-white/10 bg-white/[0.055] p-4 shadow-lg shadow-black/20;
 	}
 
 	.input {
@@ -65,5 +65,37 @@
 
 	.badge {
 		@apply inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold;
+	}
+
+	.nav-heading {
+		@apply px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-zinc-600;
+	}
+
+	.chip {
+		@apply inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-zinc-300;
+	}
+
+	.bot-tile {
+		@apply rounded-xl border border-white/10 bg-white/[0.045] p-4 shadow-lg shadow-black/20 transition hover:border-fnlb-400/30 hover:bg-white/[0.065];
+	}
+
+	.modal-panel {
+		@apply max-h-[92vh] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950/95 shadow-2xl shadow-black/60;
+	}
+
+	.tab {
+		@apply -mb-px inline-flex items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-semibold text-zinc-400 transition hover:text-zinc-100;
+	}
+
+	.tab.active {
+		@apply border-fnlb-400 text-fnlb-200;
+	}
+
+	/* Lucide swaps <i> for <svg width=24 height=24>; keep icons at text size
+	   even if a sizing class is missing from the stylesheet. */
+	:where(svg.lucide) {
+		flex-shrink: 0;
+		width: 1rem;
+		height: 1rem;
 	}
 }

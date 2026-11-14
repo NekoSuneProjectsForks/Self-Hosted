@@ -1,6 +1,7 @@
-import { state, logStyles } from '../core/state.js';
-import { escapeHtml, formatDate, icon } from '../core/ui.js';
+import { state } from '../core/state.js';
+import { escapeHtml, icon } from '../core/ui.js';
 
+/** Your dashboard account. Bot settings live on the Bots page. */
 export function renderProfile() {
 	return `
 		<div class="grid gap-4">
@@ -18,19 +19,11 @@ export function renderProfile() {
 					<p class="mt-2 text-xl font-bold">${escapeHtml(state.user.role)}</p>
 				</div>
 			</section>
-
-			<section class="shell-panel overflow-hidden rounded-lg">
-				<div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
-					<div class="flex items-center gap-2 font-semibold">${icon('terminal')} Your Runtime Logs</div>
-					<button class="btn-secondary" data-action="clear-logs">${icon('trash-2')} Clear</button>
-				</div>
-				<div id="profile-log" class="h-[520px] overflow-auto bg-black/35 p-4 font-mono text-xs leading-5">
-					${state.logs.length ? state.logs.map((log) => `
-						<div class="${logStyles[log.format] || logStyles[0]}">
-							<span class="text-zinc-600">${escapeHtml(formatDate(log.createdAt))}</span>
-							<span>${escapeHtml(log.content)}</span>
-						</div>
-					`).join('') : '<div class="text-zinc-500">No runtime output yet.</div>'}
+			<section class="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<p class="text-sm text-zinc-400">Bot settings (battle pass level, platform, sign-in, extra bots) are on the <strong class="text-zinc-200">Bots</strong> page. Runtime output is in <strong class="text-zinc-200">Console</strong>.</p>
+				<div class="flex gap-2">
+					<button class="btn-secondary" data-view="bots">${icon('bot')} Bots</button>
+					<button class="btn-secondary" data-view="console">${icon('terminal')} Console</button>
 				</div>
 			</section>
 		</div>

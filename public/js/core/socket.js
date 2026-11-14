@@ -25,7 +25,7 @@ export function connectSocket() {
 	state.socket.on('bot:log', (log) => {
 		state.logs.push(log);
 		if (state.logs.length > 250) state.logs.shift();
-		if (state.view === 'profile') render();
+		if (state.view === 'console') render();
 	});
 
 	state.socket.on('bot:updated', ({ bot }) => {
@@ -40,7 +40,7 @@ export function connectSocket() {
 			if (!state.bots.some((row) => row.id === bot.id)) state.bots = [bot];
 		}
 		if (bot.party && isControlled(bot.id)) state.party = bot.party;
-		renderIfVisible('status', 'lobby', 'botlobby');
+		renderIfVisible('status', 'lobby', 'bots');
 	});
 
 	state.socket.on('bot-accounts:updated', ({ accounts }) => {
@@ -57,9 +57,9 @@ export function connectSocket() {
 				account.accountId === botId && account.bot ? { ...account, bot: { ...account.bot, party } } : account
 			);
 		}
-		if (!isControlled(botId)) return renderIfVisible('botlobby');
+		if (!isControlled(botId)) return renderIfVisible('bots');
 		state.party = party || null;
-		renderIfVisible('lobby', 'status', 'botlobby');
+		renderIfVisible('lobby', 'status', 'bots');
 	});
 
 	state.socket.on('party:message', (message) => {
@@ -74,7 +74,7 @@ export function connectSocket() {
 			state.botAccounts = state.botAccounts.map((account) =>
 				account.accountId === botId && account.bot ? { ...account, bot: { ...account.bot, cosmetics } } : account
 			);
-			return renderIfVisible('botlobby', 'items');
+			return renderIfVisible('bots', 'items');
 		}
 		if (!cosmetics || !state.bots.length) return;
 		state.bots = state.bots.map((bot, index) => (index === 0 ? { ...bot, cosmetics } : bot));

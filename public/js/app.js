@@ -15,12 +15,57 @@ import { refreshAfterAuth, refreshLiveData } from './actions.js';
 
 const app = document.querySelector('#app');
 
+/**
+ * Socket events re-render the whole page, which used to wipe whatever was
+ * half-typed into a form (or a pop-up). Keep edited fields and focus.
+ */
+function fieldKey(el) {
+	const form = el.closest('[data-form]');
+	if (!form || !el.name) return null;
+	return `${form.dataset.form}|${form.dataset.accountId || form.dataset.botId || ''}|${el.name}`;
+}
+
+function captureFields() {
+	const saved = new Map();
+	for (const el of app.querySelectorAll('[data-form] input, [data-form] select, [data-form] textarea')) {
+		const key = fieldKey(el);
+		if (!key) continue;
+		const isCheck = el.type === 'checkbox' || el.type === 'radio';
+		const dirty = isCheck ? el.checked !== el.defaultChecked : el.tagName === 'SELECT' ? [...el.options].some((o) => o.selected !== o.defaultSelected) : el.value !== el.defaultValue;
+		if (dirty) saved.set(key, isCheck ? { checked: el.checked } : { value: el.value });
+	}
+	const active = document.activeElement;
+	const focus = active && fieldKey(active) ? { key: fieldKey(active), start: active.selectionStart, end: active.selectionEnd } : null;
+	return { saved, focus };
+}
+
+function restoreFields({ saved, focus }) {
+	for (const el of app.querySelectorAll('[data-form] input, [data-form] select, [data-form] textarea')) {
+		const key = fieldKey(el);
+		const value = key && saved.get(key);
+		if (value) {
+			if ('checked' in value) el.checked = value.checked;
+			else el.value = value.value;
+		}
+		if (focus && key === focus.key) {
+			el.focus();
+			try {
+				if (focus.start != null) el.setSelectionRange(focus.start, focus.end);
+			} catch {
+				// Not a text field.
+			}
+		}
+	}
+}
+
 function render() {
+	const fields = state.user ? captureFields() : null;
 	app.innerHTML = state.user ? renderShell() : renderAuth();
+	if (fields) restoreFields(fields);
 	window.lucide?.createIcons();
 
 	// Keep scrolling panels pinned to the newest entry.
-	for (const id of ['#profile-log', '#dm-log', '#party-chat-log']) {
+	for (const id of ['#console-log', '#dm-log', '#party-chat-log']) {
 		const node = document.querySelector(id);
 		if (node) node.scrollTop = node.scrollHeight;
 	}

@@ -1,16 +1,16 @@
 import { state } from '../core/state.js';
-import { escapeHtml, formatDate, icon, statusBadge } from '../core/ui.js';
+import { escapeHtml, icon, statusBadge } from '../core/ui.js';
 import { runtimeOnline, usingLocalFnbr } from '../core/selectors.js';
 import { epicCodeButton, platformLabel, platformOptions } from '../core/platforms.js';
 
 const NO_AUTOFILL = 'autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"';
 
-function mainPlatform() {
+export function mainPlatform() {
 	return state.config?.platform || 'WIN';
 }
 
-/** The platform this bot logs in as: its own, or the main bot's. */
-function effectivePlatform(account) {
+/** The platform an extra bot logs in as: its own, or the main bot's. */
+export function effectivePlatform(account) {
 	return account.platform || mainPlatform();
 }
 
@@ -18,83 +18,94 @@ function mainParty() {
 	return state.party && !state.controlBotId ? state.party : state.bots?.[0]?.party || null;
 }
 
-function inMainLobby(account) {
+export function inMainLobby(account) {
 	const mainPartyId = mainParty()?.id;
 	return Boolean(mainPartyId && account.bot?.party?.id === mainPartyId);
 }
 
-function accountCard(account) {
+/** One tile per bot. Click opens the settings pop-up. */
+function botTile({ key, name, sub, status, platform, bot, badges = [], actions = '' }) {
+	const party = bot?.party;
+	const cosmetics = bot?.cosmetics || {};
+	const level = bot?.profile?.battlePassLevel ?? null;
+	return `
+		<div class="bot-tile group">
+			<button class="flex w-full items-start gap-3 text-left" data-action="bot-settings" data-bot-key="${escapeHtml(key)}" title="Open settings">
+				<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/40 text-fnlb-300">${icon('bot', 'h-6 w-6')}</div>
+				<div class="min-w-0 flex-1">
+					<div class="flex items-center gap-2">
+						<p class="truncate font-semibold text-zinc-50">${escapeHtml(name)}</p>
+						${statusBadge(status)}
+					</div>
+					<p class="truncate text-xs text-zinc-500">${escapeHtml(sub)}</p>
+					<div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+						<span class="chip">${icon('monitor-smartphone', 'h-3 w-3')} ${escapeHtml(platformLabel(platform))}</span>
+						${level ? `<span class="chip">${icon('star', 'h-3 w-3')} Level ${escapeHtml(String(level))}</span>` : ''}
+						${party ? `<span class="chip">${icon('users', 'h-3 w-3')} ${escapeHtml(String(party.size ?? party.members?.length ?? 1))}/${escapeHtml(String(party.maxSize ?? 16))}</span>` : ''}
+						${cosmetics.outfit ? `<span class="chip max-w-[12rem] truncate" title="${escapeHtml(cosmetics.outfit)}">${icon('shirt', 'h-3 w-3')} ${escapeHtml(cosmetics.outfit)}</span>` : ''}
+						${badges.join('')}
+					</div>
+				</div>
+				<span class="text-zinc-600 transition group-hover:text-zinc-300">${icon('settings-2')}</span>
+			</button>
+			${actions ? `<div class="mt-3 flex flex-wrap gap-2 border-t border-white/5 pt-3">${actions}</div>` : ''}
+		</div>`;
+}
+
+function mainTile() {
+	const bot = state.bots?.[0] || null;
+	const online = runtimeOnline();
+	return botTile({
+		key: 'main',
+		name: bot?.nickname || 'Main bot',
+		sub: state.config?.deviceAuthConfigured ? 'Main bot · signed in' : 'Main bot · not signed in',
+		status: state.runtime?.status || 'offline',
+		platform: mainPlatform(),
+		bot: online ? bot : null,
+		badges: ['<span class="chip border-fnlb-400/30 text-fnlb-200">Main</span>'],
+		actions: online
+			? `<button class="btn-danger py-1.5" data-action="stop">${icon('square')} Stop</button>`
+			: `<button class="btn-primary py-1.5" data-action="start">${icon('power')} Start</button>`
+	});
+}
+
+function accountTile(account) {
 	const online = account.status === 'online';
 	const running = ['starting', 'online', 'stopping'].includes(account.status);
-	const bot = account.bot;
-	const party = bot?.party;
-	const controlled = state.controlBotId && state.controlBotId === account.accountId;
 	const id = escapeHtml(account.id);
-
-	return `
-		<div class="card ${controlled ? 'ring-1 ring-fnlb-400/60' : ''}">
-			<div class="flex items-start justify-between gap-3">
-				<div class="min-w-0">
-					<p class="truncate font-semibold">${escapeHtml(account.label)}</p>
-					<p class="truncate text-xs text-zinc-500">${escapeHtml(account.displayName || bot?.nickname || (account.accountId ? account.accountId : 'Not signed in yet'))}</p>
-				</div>
-				<div class="flex shrink-0 flex-col items-end gap-1">
-					${statusBadge(account.status)}
-					${inMainLobby(account) ? statusBadge('active', 'In main lobby') : ''}
-					${account.autoStart ? statusBadge('starting', 'Auto-start') : ''}
-				</div>
-			</div>
-
-			<dl class="mt-3 grid gap-1 text-xs text-zinc-400">
-				<div class="flex justify-between gap-2"><dt>Platform</dt><dd>${escapeHtml(platformLabel(account.activePlatform || effectivePlatform(account)))}${account.platform ? '' : ' · main'}</dd></div>
-				${account.activePlatform && account.activePlatform !== effectivePlatform(account) ? `<div class="text-amber-300">Restart this bot to switch to ${escapeHtml(platformLabel(effectivePlatform(account)))}.</div>` : ''}
-				<div class="flex justify-between gap-2"><dt>Epic login</dt><dd>${account.deviceAuthConfigured ? `Device auth ${escapeHtml(account.deviceAuthMasked)}` : account.authorizationCodeConfigured ? 'Auth code waiting for first start' : 'None'}</dd></div>
-				${online ? `<div class="flex justify-between gap-2"><dt>Party</dt><dd>${party ? `${party.size ?? party.members?.length ?? 1}/${party.maxSize ?? 16}` : '-'}</dd></div>` : ''}
-				${online && bot?.cosmetics?.outfit ? `<div class="flex justify-between gap-2"><dt>Outfit</dt><dd class="truncate">${escapeHtml(bot.cosmetics.outfit)}</dd></div>` : ''}
-				${account.startedAt ? `<div class="flex justify-between gap-2"><dt>Online since</dt><dd>${formatDate(account.startedAt)}</dd></div>` : ''}
-			</dl>
-			${account.lastError ? `<p class="mt-2 rounded border border-red-400/30 bg-red-500/10 p-2 text-xs text-red-200">${escapeHtml(account.lastError)}</p>` : ''}
-
-			<div class="mt-3 flex flex-wrap gap-2">
-				${running
-					? `<button class="btn-danger" data-action="botacc-stop" data-account-id="${id}" ${account.status !== 'online' ? 'disabled' : ''}>${icon('square')} Stop</button>`
-					: `<button class="btn-primary" data-action="botacc-start" data-account-id="${id}">${icon('power')} Start</button>`}
-				${online && runtimeOnline() && usingLocalFnbr() && !inMainLobby(account)
-					? `<button class="btn-secondary" data-action="botacc-join-main" data-account-id="${id}">${icon('log-in')} Join main lobby</button>`
-					: ''}
-				${online
-					? `<button class="btn-secondary" data-action="botacc-control" data-bot-account="${escapeHtml(account.accountId)}">${icon('gamepad-2')} ${controlled ? 'Controlling' : 'Control'}</button>
-					   <button class="btn-secondary" data-action="botacc-leave" data-bot-account="${escapeHtml(account.accountId)}">${icon('log-out')} Leave party</button>`
-					: ''}
-				<button class="btn-secondary" data-action="botacc-toggle-autostart" data-account-id="${id}" data-auto-start="${account.autoStart ? 'false' : 'true'}">${icon(account.autoStart ? 'toggle-right' : 'toggle-left')} Auto-start</button>
-			</div>
-
-			<details class="mt-3">
-				<summary class="cursor-pointer text-xs text-zinc-400">Sign in again / rename / remove</summary>
-				<form class="mt-2 grid gap-2" data-form="botacc-update" data-account-id="${id}">
-					<input class="input" name="label" value="${escapeHtml(account.label)}" maxlength="64" placeholder="Label" />
-					<select class="input" name="platform" title="Platform this bot shows as">
-						${platformOptions(account.platform, { includeMain: true, mainPlatform: mainPlatform() })}
-					</select>
-					<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="New one-time authorization code" />
-					<div class="flex flex-wrap gap-2">
-						${epicCodeButton('Sign in again', account.id)}
-						<button class="btn-secondary" type="submit">${icon('save')} Save</button>
-						<button class="btn-secondary" type="button" data-action="botacc-clear-auth" data-account-id="${id}">${icon('key-round')} Clear login</button>
-						<button class="btn-danger" type="button" data-action="botacc-delete" data-account-id="${id}">${icon('trash-2')} Remove</button>
-					</div>
-				</form>
-			</details>
-		</div>
-	`;
+	const restartHint = account.activePlatform && account.activePlatform !== effectivePlatform(account);
+	return botTile({
+		key: account.id,
+		name: account.label,
+		sub: account.displayName || account.accountId || 'Not signed in yet',
+		status: account.status,
+		platform: account.activePlatform || effectivePlatform(account),
+		bot: online ? account.bot : null,
+		badges: [
+			inMainLobby(account) ? '<span class="chip border-fnlb-400/30 text-fnlb-200">In main lobby</span>' : '',
+			account.autoStart ? '<span class="chip">Auto-start</span>' : '',
+			restartHint ? `<span class="chip border-amber-400/30 text-amber-200">Restart to switch to ${escapeHtml(platformLabel(effectivePlatform(account)))}</span>` : '',
+			account.lastError ? `<span class="chip border-red-400/30 text-red-200" title="${escapeHtml(account.lastError)}">Error</span>` : ''
+		],
+		actions: `
+			${running
+				? `<button class="btn-danger py-1.5" data-action="botacc-stop" data-account-id="${id}" ${online ? '' : 'disabled'}>${icon('square')} Stop</button>`
+				: `<button class="btn-primary py-1.5" data-action="botacc-start" data-account-id="${id}">${icon('power')} Start</button>`}
+			${online && runtimeOnline() && usingLocalFnbr() && !inMainLobby(account)
+				? `<button class="btn-secondary py-1.5" data-action="botacc-join-main" data-account-id="${id}">${icon('log-in')} Join main lobby</button>`
+				: ''}`
+	});
 }
 
 function addForm() {
 	const full = state.botAccounts.length >= state.maxBotAccounts;
 	return `
-		<section class="shell-panel rounded-lg p-4">
-			<p class="font-semibold">Add a bot account</p>
-			<p class="mt-1 text-sm text-zinc-500">Use a separate <strong class="text-red-300">dummy</strong> Epic account for each bot, never your main account. Bot accounts are at high risk of a ban if abused. Get the code while signed in as <em>that</em> account (a private window helps), then paste the code or the whole page Epic shows. Codes work once and expire within minutes, so start the bot soon after adding it. After the first login the device auth is saved encrypted and reused.</p>
+		<section class="shell-panel rounded-xl p-4">
+			<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+				<p class="font-semibold">Add an extra bot</p>
+				<span class="text-xs text-zinc-500">${state.botAccounts.length}/${state.maxBotAccounts} extra bots</span>
+			</div>
+			<p class="mt-1 text-sm text-zinc-500">Use a separate <strong class="text-red-300">dummy</strong> Epic account for each bot, never your main; bot accounts are at high risk of a ban if abused. Easiest: <strong>Sign in with Epic</strong>. Or paste a one-time code (or the whole page Epic shows).</p>
 			<form class="mt-3 grid gap-3 md:grid-cols-[1fr_2fr_1fr_auto_auto]" data-form="botacc-create">
 				<input class="input" name="label" maxlength="64" placeholder="Label, e.g. Bot 2" />
 				<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="Code, or the whole page Epic shows" required />
@@ -106,18 +117,15 @@ function addForm() {
 				</label>
 				<button class="btn-primary" type="submit" ${full ? 'disabled' : ''}>${icon('plus')} Add</button>
 			</form>
-			<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-				${epicCodeButton('Sign in with Epic / get code', 'new')}
-				${state.botAccounts.length}/${state.maxBotAccounts} extra bots
-			</div>
+			<div class="mt-2">${epicCodeButton('Sign in with Epic / get code', 'new')}</div>
 		</section>
 	`;
 }
 
 const SETTING_LABELS = [
 	['autoReady', 'Auto-ready', 'Bots ready up once every player in the lobby is ready, and unready if one backs out.'],
-	['partyCommands', 'Lobby chat commands', 'Players type !ready, !unready or !sitout in lobby chat and every bot follows.'],
-	['dmCommands', 'DM commands', 'Friends DM a bot CID_ / EID_ / !stats / !help and so on.'],
+	['partyCommands', 'Lobby chat commands', 'Players type !ready, !unready, !sitout or !copy in lobby chat.'],
+	['dmCommands', 'DM commands', 'Friends DM a bot CID_ / EID_ / !level / !copy / !help and so on.'],
 	['emotePlayOnce', 'Play emotes once', 'Stop an emote after its length instead of looping it.'],
 	['acceptInvites', 'Accept party invites', 'Your own bots always accept each other either way.'],
 	['acceptFriendRequests', 'Accept friend requests', 'Your own bots always accept each other either way.']
@@ -127,10 +135,9 @@ function settingsPanel() {
 	const settings = state.lobbySettings;
 	if (!settings) return '';
 	return `
-		<section class="shell-panel rounded-lg p-4">
-			<p class="font-semibold">Lobby behaviour</p>
-			<p class="mt-1 text-sm text-zinc-500">Applies to the main bot and every extra bot straight away, with no restart.</p>
-			<div class="mt-3 grid gap-2 md:grid-cols-2">
+		<section class="shell-panel rounded-xl p-4">
+			<p class="font-semibold">Lobby behaviour <span class="text-xs font-normal text-zinc-500">all bots · applies straight away</span></p>
+			<div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
 				${SETTING_LABELS.map(
 					([key, label, help]) => `
 					<label class="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.035] p-3 text-sm">
@@ -142,7 +149,7 @@ function settingsPanel() {
 			<label class="mt-3 flex flex-wrap items-center gap-2 text-sm text-zinc-300">
 				Emote length
 				<input class="input w-24 py-1" type="number" min="1" max="60" step="0.5" value="${escapeHtml(String(settings.emoteSeconds ?? 6))}" data-action="lobby-emote-seconds" ${settings.emotePlayOnce ? '' : 'disabled'} />
-				seconds <span class="text-xs text-zinc-500">(how long before a "play once" emote stops; most dances are 4 to 8 s)</span>
+				seconds <span class="text-xs text-zinc-500">(most dances are 4 to 8 s)</span>
 			</label>
 		</section>
 	`;
@@ -152,19 +159,18 @@ export function renderBotLobby() {
 	const accounts = state.botAccounts || [];
 	const online = accounts.filter((account) => account.status === 'online').length;
 	const mainOnline = runtimeOnline() && usingLocalFnbr();
-	const party = mainParty();
 
 	return `
 		<div class="grid gap-4">
-			<section class="shell-panel rounded-lg p-4">
+			<section class="shell-panel rounded-xl p-4">
 				<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 					<div>
-						<p class="font-semibold">Bot Lobby</p>
-						<p class="mt-1 text-sm text-zinc-500">Run extra local fnbr bots next to your main bot and fill a lobby with them. Main bot: ${mainOnline ? `online${party ? `, party ${party.size ?? party.members?.length ?? 1}/${party.maxSize ?? 16}` : ''}` : 'offline'}. Extra bots online: ${online}/${accounts.length}.</p>
+						<p class="font-semibold">Your bots</p>
+						<p class="mt-1 text-sm text-zinc-500">Click a bot to open its settings: battle pass level, look, platform, sign-in and more. Extra bots online: ${online}/${accounts.length}.</p>
 					</div>
 					<div class="flex flex-wrap gap-2">
 						<button class="btn-primary" data-action="botlobby-start-all" ${!accounts.length ? 'disabled' : ''}>${icon('power')} Start all${mainOnline ? ' + join' : ''}</button>
-						<button class="btn-secondary" data-action="botlobby-join-main" ${!online || !mainOnline ? 'disabled' : ''}>${icon('users')} All join main lobby</button>
+						<button class="btn-secondary" data-action="botlobby-join-main" ${!online || !mainOnline ? 'disabled' : ''}>${icon('users')} All join main</button>
 						<button class="btn-secondary" data-action="botlobby-leave" ${!online ? 'disabled' : ''}>${icon('log-out')} All leave</button>
 						<button class="btn-danger" data-action="botlobby-stop-all" ${!online ? 'disabled' : ''}>${icon('square')} Stop all</button>
 					</div>
@@ -173,16 +179,15 @@ export function renderBotLobby() {
 					<input class="input" name="target" placeholder="Friend name or party ID: every online extra bot joins it" />
 					<button class="btn-secondary shrink-0" type="submit" ${!online ? 'disabled' : ''}>${icon('log-in')} All join</button>
 				</form>
-				<p class="mt-2 text-xs text-zinc-500">To join a friend's party, each bot must be friends with them. Pick a bot with <strong>Control</strong> and use the Friends page to add them. Friends can also DM any bot <code>!help</code> for lobby commands.</p>
 			</section>
 
-			${settingsPanel()}
+			<div class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+				${usingLocalFnbr() ? mainTile() : ''}
+				${accounts.map(accountTile).join('')}
+			</div>
 
 			${addForm()}
-
-			${accounts.length
-				? `<div class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${accounts.map(accountCard).join('')}</div>`
-				: `<div class="shell-panel rounded-lg p-6 text-center text-sm text-zinc-500">No extra bot accounts yet. Add one above to start building a bot lobby.</div>`}
+			${settingsPanel()}
 		</div>
 	`;
 }

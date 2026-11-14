@@ -1,9 +1,25 @@
 import { BotLog } from '../models/index.js';
-import { getPlainConfig, sanitizeConfig, upsertPlainConfig } from '../services/configStore.js';
+import { getPlainConfig, sanitizeConfig, updateMainBotSettings, upsertPlainConfig } from '../services/configStore.js';
 import { asyncRoute } from '../http/helpers.js';
 
 export function registerConfigRoutes(ctx) {
 	const { app, runtime, requireAuth, requireActive, requireAdmin, io } = ctx;
+
+	// Main bot platform / status from the Bots page. Status applies live; a
+	// platform change flags a restart (it is fixed at login).
+	app.patch(
+		'/api/config/main-bot',
+		requireAuth,
+		requireActive,
+		asyncRoute(async (req, res) => {
+			const config = await updateMainBotSettings(req.user.id, {
+				platform: req.body?.platform,
+				defaultStatus: req.body?.defaultStatus
+			});
+			const applied = await runtime.applySavedConfig(req.user.id, config);
+			return res.json({ config: sanitizeConfig(config), ...applied, runtime: runtime.serialize(req.user.id) });
+		})
+	);
 
 	app.get(
 		'/api/me',

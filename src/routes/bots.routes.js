@@ -292,6 +292,17 @@ export function registerBotRoutes(ctx) {
 		})
 	);
 
+	// Copy a party member's outfit / back bling / pickaxe / kicks (+ BP level, banner).
+	app.post(
+		'/api/bots/:botId/party/members/:memberId/copy',
+		requireAuth,
+		requireActive,
+		asyncRoute(async (req, res) => {
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
+			return res.json(await adapter.copyMember(req.params.memberId, { profile: req.body?.profile !== false }));
+		})
+	);
+
 	// Equip several slots at once. Only the slots sent change.
 	app.patch(
 		'/api/bots/:botId/loadout',

@@ -43,11 +43,10 @@ export function tomorrowLocalInput() {
 
 export function renderToast() {
 	if (!state.toast) return '';
-	const classes =
-		state.toast.type === 'error'
-			? 'border-red-400/30 bg-red-500/15 text-red-100'
-			: 'border-fnlb-400/30 bg-fnlb-500/15 text-fnlb-100';
-	return `<div class="fixed right-4 top-4 z-50 max-w-sm rounded-lg border px-4 py-3 text-sm shadow-xl ${classes}">${escapeHtml(state.toast.message)}</div>`;
+	const error = state.toast.type === 'error';
+	const classes = error ? 'border-red-400/40 text-red-100' : 'border-fnlb-400/40 text-fnlb-100';
+	// Opaque, bottom-right and above pop-ups, so it never hides the top bar.
+	return `<div class="fixed bottom-4 right-4 z-[60] flex max-w-md items-start gap-2 rounded-xl border bg-zinc-950/95 px-4 py-3 text-sm shadow-2xl shadow-black/60 backdrop-blur ${classes}" role="status">${icon(error ? 'circle-alert' : 'circle-check', `mt-0.5 h-4 w-4 ${error ? 'text-red-300' : 'text-fnlb-300'}`)}<span>${escapeHtml(state.toast.message)}</span></div>`;
 }
 
 export function statCard(label, value) {

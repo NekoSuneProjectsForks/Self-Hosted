@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 116/116 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 120/120 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -199,3 +199,9 @@ modules plus a 167-line wiring file.
 - [x] Profile: battle pass level/owned, banner, crowns (`setBattlePass`, `setBanner`, `setCosmeticStats`); live or saved as default; `!level`, `!crowns` DMs
 - [x] Join defaults: re-applied whenever the bot's party ID changes (joined, invited, new own party); live edits temporary; privacy only when leader
 - [x] Emotes play once: cleared after the configurable emote length (default 6 s); toggle + length under Lobby behaviour
+- [x] UI redesign: grouped sidebar, sticky top bar with control picker, Bots page with a per-bot settings pop-up (Overview / Look & level / Account), Console page, Account page; old view names still work
+- [x] Copy a player's look (Lobby button, pop-up, `!copy` in DMs and lobby chat) + `POST /api/bots/:botId/party/members/:memberId/copy`
+- [x] Quick battle pass level on the bot's Lobby card; players' levels shown
+- [x] Main bot platform/status saved via `PATCH /api/config/main-bot` (a narrow save that can't reset other switches)
+- [x] Oversized icons: the committed `public/styles.css` was stale (no `.h-3` etc.), so hosts that skip `npm run build` lost sizing. Rebuilt and committed, plus a `:where(svg.lucide)` fallback. Added the missing `fnlb-100/200/600` shades
+- [x] Re-renders keep half-typed form fields and focus

@@ -71,10 +71,14 @@ document.addEventListener('click', async (event) => {
 				state.lobbySettings = (await api('/api/bot-lobby/settings').catch(() => null))?.settings || state.lobbySettings;
 			}
 			if (view === 'lobby') await loadParty(false);
-			if (view === 'botlobby') {
+			if (view === 'bots' || view === 'botlobby') {
 				await Promise.all([
 					loadBotAccounts(false),
 					loadParty(false).catch(() => {}),
+					state.dashboard ? null : loadDashboard(false).catch(() => {}),
+					api('/api/bot-defaults').then((data) => {
+						state.botDefaults = data;
+					}).catch(() => {}),
 					api('/api/bot-lobby/settings').then((data) => {
 						state.lobbySettings = data.settings;
 					})
@@ -110,7 +114,7 @@ document.addEventListener('click', async (event) => {
 		return;
 	}
 
-	const botButton = event.target.closest('[data-bot-id]');
+	const botButton = event.target.closest('button[data-bot-id]:not([data-action])');
 	if (botButton) {
 		try {
 			state.userSearchResults = [];
@@ -200,6 +204,59 @@ document.addEventListener('click', async (event) => {
 				}
 			}
 			state.epicCodePrompt = false;
+			render();
+			return;
+		}
+
+		// ---- Bot settings pop-up ----
+		if (action === 'bot-settings') {
+			state.botModal = { key: button.dataset.botKey, tab: 'overview' };
+			render();
+			return;
+		}
+		if (action === 'bot-modal-tab') {
+			state.botModal = { ...state.botModal, tab: button.dataset.tab };
+			render();
+			return;
+		}
+		if (action === 'bot-modal-close' || (action === 'bot-modal-backdrop' && event.target === button)) {
+			state.botModal = null;
+			render();
+			return;
+		}
+		if (action === 'botmodal-control') {
+			state.botModal = null;
+			await switchControlledBot(button.dataset.botId || null);
+			state.view = 'lobby';
+			await loadParty(false).catch(() => {});
+			render();
+			return;
+		}
+		if (action === 'botmodal-leave') {
+			const result = await api(`/api/bots/${encodeURIComponent(button.dataset.botId)}/party`, {
+				method: 'PATCH',
+				body: { leave: true }
+			});
+			setToast(result.results?.[0]?.content || 'Left the party.');
+			await loadBotAccounts(false).catch(() => {});
+			render();
+			return;
+		}
+		if (action === 'botmodal-level') {
+			const result = await api(`/api/bots/${encodeURIComponent(button.dataset.botId)}/profile`, {
+				method: 'PATCH',
+				body: { profile: { battlePassLevel: button.dataset.level } }
+			});
+			setToast(result.content, result.failed?.length ? 'error' : 'info');
+			render();
+			return;
+		}
+		if (action === 'copy-look') {
+			const result = await api(
+				`/api/bots/${encodeURIComponent(button.dataset.botId)}/party/members/${encodeURIComponent(button.dataset.memberId)}/copy`,
+				{ method: 'POST', body: {} }
+			);
+			setToast(result.content, result.failed?.length ? 'error' : 'info');
 			render();
 			return;
 		}
@@ -338,6 +395,11 @@ document.addEventListener('click', async (event) => {
 			await api('/api/config/device-auth/clear', { method: 'POST', body: {} });
 			await loadMe();
 			setToast('Epic device auth cleared. Enter a new authorization code to sign in again.');
+		}
+		if (action === 'console-filter') {
+			state.consoleFilter = button.dataset.filter;
+			render();
+			return;
 		}
 		if (action === 'clear-logs') {
 			await api('/api/bot/logs', { method: 'DELETE', body: {} });
@@ -589,6 +651,53 @@ document.addEventListener('submit', async (event) => {
 			return;
 		}
 
+		if (form.dataset.form === 'quick-level') {
+			const result = await api(`/api/bots/${encodeURIComponent(form.dataset.botId)}/profile`, {
+				method: 'PATCH',
+				body: { profile: { battlePassLevel: data.battlePassLevel } }
+			});
+			form.reset();
+			setToast(result.content, result.failed?.length ? 'error' : 'info');
+			await loadParty(false).catch(() => {});
+			render();
+			return;
+		}
+		if (form.dataset.form === 'botmodal-main') {
+			const result = await api('/api/config/main-bot', {
+				method: 'PATCH',
+				body: { platform: data.platform, defaultStatus: data.defaultStatus }
+			});
+			state.config = { ...state.config, ...result.config };
+			if (result.runtime) state.runtime = result.runtime;
+			setToast(result.restartRequired ? 'Saved. Restart the bot to switch platform.' : 'Saved.');
+			render();
+			return;
+		}
+		if (form.dataset.form === 'botmodal-profile') {
+			const profile = {
+				battlePassLevel: data.battlePassLevel,
+				battlePassPurchased: data.battlePassPurchased,
+				bannerId: data.bannerId,
+				bannerColor: data.bannerColor,
+				crowns: data.crowns
+			};
+			const filled = Object.fromEntries(Object.entries(profile).filter(([, v]) => v !== '' && v !== undefined));
+			if (!Object.keys(filled).length) throw new Error('Fill in at least one field.');
+			if (event.submitter?.value === 'default') {
+				const result = await api('/api/bot-defaults', { method: 'PUT', body: { profile: filled } });
+				state.botDefaults = { loadout: result.loadout, profile: result.profile };
+				setToast(result.content);
+			} else {
+				const result = await api(`/api/bots/${encodeURIComponent(form.dataset.botId)}/profile`, {
+					method: 'PATCH',
+					body: { profile: filled }
+				});
+				setToast(result.content, result.failed?.length ? 'error' : 'info');
+			}
+			form.reset();
+			render();
+			return;
+		}
 		if (form.dataset.form === 'profile') {
 			const profile = {
 				battlePassLevel: data.battlePassLevel,
@@ -884,6 +993,7 @@ async function handleBotLobbyAction(action, button) {
 	if (action === 'botacc-delete') {
 		if (!window.confirm('Remove this bot account? Its saved Epic login is deleted.')) return;
 		await api(path, { method: 'DELETE', body: {} });
+		state.botModal = null;
 		setToast('Bot account removed.');
 	}
 	if (action === 'botlobby-start-all') {
@@ -994,6 +1104,10 @@ async function handleAdminAction(action, userId) {
 
 document.addEventListener('keydown', (event) => {
 	if (event.key === 'Escape' && state.epicCodePrompt) closeEpicPrompt();
+	else if (event.key === 'Escape' && state.botModal) {
+		state.botModal = null;
+		render();
+	}
 });
 
 let epicPollTimer = null;
@@ -1062,3 +1176,17 @@ try {
 } catch {
 	state.loadoutTray = {};
 }
+
+// Console text filter: re-render as you type, keeping focus.
+document.addEventListener('input', (event) => {
+	const query = event.target.closest('[data-action="console-query"]');
+	if (!query) return;
+	state.consoleQuery = query.value;
+	const caret = query.selectionStart;
+	render();
+	const next = document.querySelector('[data-action="console-query"]');
+	if (next) {
+		next.focus();
+		next.setSelectionRange(caret, caret);
+	}
+});

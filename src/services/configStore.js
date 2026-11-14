@@ -333,6 +333,32 @@ export async function upsertPlainConfig(userId, payload) {
 	return next;
 }
 
+/**
+ * Main-bot settings edited from the Bots page. Only touches these fields, so it
+ * can't reset unrelated switches the way a partial full-config save would.
+ */
+export async function updateMainBotSettings(userId, { platform, defaultStatus } = {}) {
+	const values = {};
+	if (platform !== undefined) {
+		const next = normalizePlatform(platform, '');
+		if (!next) {
+			const error = new Error(`Unsupported platform: ${platform}`);
+			error.status = 400;
+			throw error;
+		}
+		values.platform = next;
+	}
+	if (defaultStatus !== undefined) {
+		const text = cleanText(defaultStatus).slice(0, 120);
+		values.defaultStatusEncrypted = encryptText(text || DEFAULT_CONFIG.defaultStatus);
+	}
+	if (!Object.keys(values).length) return getPlainConfig(userId);
+	const row = await BotConfig.findOne({ where: { userId } });
+	if (row) await row.update(values);
+	else await BotConfig.create({ userId, ...values });
+	return getPlainConfig(userId);
+}
+
 export async function saveDeviceAuthForUser(userId, deviceAuth) {
 	const normalized = normalizeDeviceAuth(deviceAuth);
 	const row = await BotConfig.findOne({ where: { userId } });

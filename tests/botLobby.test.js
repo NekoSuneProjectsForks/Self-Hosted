@@ -522,3 +522,53 @@ describe('emotes play once', () => {
 		assert.deepEqual(client.calls.at(-1), ['clearEmote']);
 	});
 });
+
+describe('copy a player\'s look', () => {
+	function partyWithPlayer(player) {
+		const client = fakeClient('bot');
+		client.party.me.setBackpack = async (id) => client.calls.push(['setBackpack', id]);
+		client.party.me.setPickaxe = async (id) => client.calls.push(['setPickaxe', id]);
+		client.party.me.setShoes = async (id) => client.calls.push(['setShoes', id]);
+		client.party.me.setBattlePass = async (owned, level) => client.calls.push(['setBattlePass', owned, level]);
+		client.party.me.setBanner = async (id, color) => client.calls.push(['setBanner', id, color]);
+		client.party.me.meta = {};
+		client.party.members = new Map([['bot', { id: 'bot' }], [player.id, player]]);
+		return client;
+	}
+
+	it('copies outfit, back bling, pickaxe, kicks, level and banner', async () => {
+		const client = partyWithPlayer({
+			id: 'p1',
+			displayName: 'NekoSuneVR',
+			outfit: 'Character_FeelUnionSki',
+			backpack: 'Backpack_FeelUnionSki',
+			pickaxe: 'Pickaxe_FeelUnionSki',
+			shoes: 'Shoes_HeatShineTorn',
+			battlepass: { passLevel: 212, bHasPurchasedPass: true },
+			banner: { bannerIconId: 'BRSeason01', bannerColorId: 'defaultcolor15' }
+		});
+		const result = await runtimeFor(client).copyMember('NekoSuneVR');
+		assert.deepEqual(client.calls.map((c) => c[0]), ['setOutfit', 'setBackpack', 'setPickaxe', 'setShoes', 'setBattlePass', 'setBanner']);
+		assert.deepEqual(client.calls.find((c) => c[0] === 'setBattlePass'), ['setBattlePass', true, 212]);
+		assert.match(result.content, /Copied NekoSuneVR's look/);
+	});
+
+	it('only copies the slots the player actually has', async () => {
+		const client = partyWithPlayer({ id: 'p1', displayName: 'P', outfit: 'CID_1' });
+		await runtimeFor(client).copyMember('p1', { profile: false });
+		assert.deepEqual(client.calls, [['setOutfit', 'CID_1']]);
+	});
+
+	it('refuses players not in the party, and itself', async () => {
+		const client = partyWithPlayer({ id: 'p1', outfit: 'CID_1' });
+		const runtime = runtimeFor(client);
+		await assert.rejects(runtime.copyMember('ghost'), (error) => error.status === 404);
+		await assert.rejects(runtime.copyMember('bot'), (error) => error.status === 400);
+	});
+
+	it('!copy in lobby chat copies the sender', async () => {
+		const client = partyWithPlayer({ id: 'p1', displayName: 'P', outfit: 'CID_9' });
+		await runtimeFor(client).handlePartyCommand({ author: { id: 'p1' }, content: '!copy' });
+		assert.deepEqual(client.calls[0], ['setOutfit', 'CID_9']);
+	});
+});

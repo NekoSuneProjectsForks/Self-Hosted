@@ -56,6 +56,10 @@ export class BaseRuntime {
 		throw this.unsupported('dashboard');
 	}
 
+	async copyMember() {
+		throw this.unsupported('copying a player\'s look');
+	}
+
 	async setProfile() {
 		throw this.unsupported('profile editing');
 	}
