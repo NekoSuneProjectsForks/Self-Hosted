@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 139/139 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 144/144 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -215,3 +215,6 @@ modules plus a 167-line wiring file.
 - [!] Unconfirmed until tested in a real queue. If it still fails, the raw check output is the next thing to look at
 - [x] Server Config page removed; its settings moved to the main bot's Advanced tab (plus Bots → Advanced settings, which also works in FNLB mode). Old `config` links open Bots
 - [x] Banner icon + colour pickers (searchable grids, fortnite-api.com, cached 12 h) on the profile forms
+- [x] From the user's check output: build matched (59543849), both Ready, but the bot's own `islandSelection` stayed at fnbr's default (Build · Solo · EU, timestamp 0) and its download progress at 0.000000 while the leader was on Zero Build Duo. The bot now copies the leader's mode, download progress and preload flag (`mirrorLeader`, on by default), live and before readying
+- [x] Matchmaking check: per-member mode table, mismatch problems, raw non-cosmetic field diff against the leader; playlist read via fnbr's 42.x `party.playlistId`
+- [!] Confirm in a real queue; if it still fails, the `differences` list in the check is the next thing to read

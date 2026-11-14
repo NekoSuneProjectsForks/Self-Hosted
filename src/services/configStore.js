@@ -19,6 +19,7 @@ const DEFAULT_LOCAL_CATEGORY = {
 		// Lobby-bot behaviour (all live, no restart).
 		botsSitOut: false,
 		leaveOnMatchStart: true,
+		mirrorLeader: true,
 		rejoinAfterMatch: true,
 		autoReady: true,
 		partyCommands: true,

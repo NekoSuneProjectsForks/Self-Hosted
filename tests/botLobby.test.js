@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LocalFnbrRuntime } from '../src/runtime/LocalFnbrRuntime.js';
+import { LocalFnbrRuntime, islandOf } from '../src/runtime/LocalFnbrRuntime.js';
 import { RuntimeManager } from '../src/runtime/RuntimeManager.js';
 
 /**
@@ -781,4 +781,96 @@ describe('Fortnite build (netCL)', () => {
 		assert.equal(check.botBuild, null);
 		assert.match(check.problems.join(' '), /does not know the Fortnite build/);
 	});
+});
+
+describe("copy the leader's mode (42.x lobbies)", () => {
+	class FakeMeta {
+		constructor(schema) {
+			this.schema = { ...schema };
+		}
+		get(key) {
+			const value = this.schema[key];
+			if (key.endsWith('_j')) return value === undefined ? {} : JSON.parse(value);
+			return value ?? '';
+		}
+		set(key, value, isRaw = false) {
+			this.schema[key] = isRaw || !key.endsWith('_j') ? String(value) : JSON.stringify(value);
+			return this.schema[key];
+		}
+	}
+	const island = (teamSize, buildMode, squadFill = 'NoFill') =>
+		JSON.stringify({
+			LinkId: 'playlist_br',
+			MatchmakingSettingsV2: {
+				'/Fortnite.com/BattleRoyale/Matchmaking:TeamSize': teamSize,
+				'/Fortnite.com/BattleRoyale/Matchmaking:BuildMode': buildMode,
+				'/Fortnite.com/Matchmaking:SquadFill': squadFill,
+				'/Fortnite.com/Matchmaking:Region': 'EU'
+			}
+		});
+	const mm = (teamSize, buildMode, ts) =>
+		JSON.stringify({ MatchmakingInfo: { readyStatus: 'NotReady', islandSelection: { island: island(teamSize, buildMode), timestamp: ts } } });
+
+	function lobby() {
+		const client = fakeClient('bot');
+		const sent = [];
+		const me = client.party.me;
+		me.id = 'bot';
+		me.meta = new FakeMeta({ 'Default:MatchmakingInfo_j': mm('Solo', 'Build', 0), 'Default:DownloadOnDemandProgress_d': '0.000000', 'Default:LobbyState_j': JSON.stringify({ LobbyState: { hasPreloadedAthena: false } }) });
+		me.sendPatch = async (patch) => sent.push(patch);
+		const leader = {
+			id: 'p1',
+			displayName: 'NekoSuneVR',
+			isLeader: true,
+			meta: new FakeMeta({ 'Default:MatchmakingInfo_j': mm('Duo', 'ZeroBuild', 123), 'Default:DownloadOnDemandProgress_d': '1.000000', 'Default:LobbyState_j': JSON.stringify({ LobbyState: { hasPreloadedAthena: true } }) })
+		};
+		client.party.leader = leader;
+		client.party.members = new Map([['bot', me], ['p1', leader]]);
+		return { client, runtime: runtimeFor(client), me, leader, sent };
+	}
+
+	it("copies the leader's mode, download progress and preload flag in one patch", async () => {
+		const { runtime, me, sent } = lobby();
+		assert.equal(await runtime.syncFromLeader(), true);
+		assert.equal(sent.length, 1);
+		const mode = islandOfFor(me);
+		assert.equal(mode.teamSize, 'Duo');
+		assert.equal(mode.buildMode, 'ZeroBuild');
+		assert.equal(sent[0]['Default:DownloadOnDemandProgress_d'], '1.000000');
+		assert.match(sent[0]['Default:LobbyState_j'], /"hasPreloadedAthena":true/);
+	});
+
+	it('does nothing when already in sync', async () => {
+		const { runtime, sent } = lobby();
+		await runtime.syncFromLeader();
+		assert.equal(await runtime.syncFromLeader(), false);
+		assert.equal(sent.length, 1);
+	});
+
+	it('copies before readying, so the ready patch carries the right mode', async () => {
+		const { runtime, me } = lobby();
+		const order = [];
+		me.sendPatch = async () => order.push('mode');
+		me.setReadiness = async () => order.push('ready');
+		await runtime.setReadiness(true);
+		assert.deepEqual(order, ['mode', 'ready']);
+	});
+
+	it('the matchmaking check reports the mismatch before syncing', async () => {
+		const { runtime } = lobby();
+		const check = runtime.matchmakingCheck();
+		assert.ok(check.problems.some((text) => /Mode mismatch on teamSize/.test(text)));
+		assert.ok(check.differences.some((row) => row.key === 'Default:MatchmakingInfo_j'));
+	});
+
+	it('can be switched off', async () => {
+		const { client, sent } = lobby();
+		const runtime = runtimeFor(client, { config: { mirrorLeader: false } });
+		assert.equal(await runtime.syncFromLeader(), false);
+		assert.equal(sent.length, 0);
+	});
+
+	function islandOfFor(member) {
+		return islandOf(member);
+	}
 });

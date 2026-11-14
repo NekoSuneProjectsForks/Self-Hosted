@@ -10,7 +10,7 @@ import { asyncRoute, httpError } from '../http/helpers.js';
 import { getPlainConfig, updateLocalCategoryConfig } from '../services/configStore.js';
 import { normalizeBuildId } from '../runtime/LocalFnbrRuntime.js';
 
-const LOBBY_SETTINGS = ['autoReady', 'leaveOnMatchStart', 'rejoinAfterMatch', 'botsSitOut', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
+const LOBBY_SETTINGS = ['autoReady', 'mirrorLeader', 'leaveOnMatchStart', 'rejoinAfterMatch', 'botsSitOut', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
 
 function settingsOf(config = {}) {
 	const seconds = Number(config.emoteSeconds);

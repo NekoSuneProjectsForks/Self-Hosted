@@ -287,9 +287,19 @@ recreates its own party with it (only while it's alone), falls back to a
 friend's party presence, and can be set by hand under **Lobby behaviour →
 Fortnite build**.
 
+**Match the leader's mode** (42.x lobbies): every member publishes its own
+mode selection (`MatchmakingInfo.islandSelection`: Build/Zero Build, team size,
+fill, region) and loading state (`DownloadOnDemandProgress_d`,
+`LobbyState.hasPreloadedAthena`). A real client copies the leader's; fnbr never
+does when the bot isn't leader, so the bot kept saying "Build · Solo · EU · 0%
+downloaded" while the leader picked e.g. Zero Build Duo. The bot now copies the
+leader's values whenever the leader changes them and right before it readies.
+Toggle: **Lobby behaviour → Match the leader's mode**.
+
 **Matchmaking check** (Lobby page) shows what the bot is telling Fortnite: build,
-party build, playlist, fill, each member's readiness, crossplay and platform,
-plus a list of problems. The raw output is there to copy when asking for help.
+party build, each member's readiness, mode (build mode, team size, fill,
+region), download progress, crossplay and platform, a list of problems, and
+every non-cosmetic field that differs between the bot and the leader. The raw output is there to copy when asking for help.
 
 Turn each of these on or off under **Bots → Lobby behaviour**. **Sit out instead
 of readying** is still there (off by default) for parties that want to play

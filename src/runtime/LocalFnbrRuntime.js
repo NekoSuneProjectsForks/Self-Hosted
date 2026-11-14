@@ -75,6 +75,36 @@ export function normalizeProfile(input = {}) {
 	return out;
 }
 
+/**
+ * A member's mode selection from the 42.x lobby meta: each member publishes
+ * its own MatchmakingInfo.islandSelection (LinkId + MatchmakingSettingsV2).
+ */
+export function islandOf(member) {
+	const info = safeValue(() => member?.meta?.get?.('Default:MatchmakingInfo_j')?.MatchmakingInfo, null);
+	let island = info?.islandSelection?.island ?? null;
+	if (typeof island === 'string') {
+		try {
+			island = JSON.parse(island);
+		} catch {
+			island = null;
+		}
+	}
+	const settings = island?.MatchmakingSettingsV2 || {};
+	return {
+		linkId: island?.LinkId || null,
+		teamSize: settings['/Fortnite.com/BattleRoyale/Matchmaking:TeamSize'] || null,
+		buildMode: settings['/Fortnite.com/BattleRoyale/Matchmaking:BuildMode'] || null,
+		squadFill: settings['/Fortnite.com/Matchmaking:SquadFill'] || null,
+		ranked: settings['/Fortnite.com/Matchmaking:Ranked'] || null,
+		region: settings['/Fortnite.com/Matchmaking:Region'] || null,
+		timestamp: info?.islandSelection?.timestamp ?? null
+	};
+}
+
+function sameJson(a, b) {
+	return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
 /** "1:3:12345678" or a bare netCL → "1:3:12345678"; anything without a number → null. */
 export function normalizeBuildId(value) {
 	const text = String(value ?? '').trim();
@@ -199,7 +229,7 @@ function serializeParty(party) {
 		maxSize: party.maxSize,
 		isPrivate: safeValue(() => party.isPrivate, false),
 		playlist,
-		playlistId: playlist?.linkId?.mnemonic || playlist?.LinkId || null,
+		playlistId: safeValue(() => party.playlistId, null) || playlist?.linkId?.mnemonic || playlist?.LinkId || null,
 		customMatchmakingKey: safeValue(() => party.customMatchmakingKey, null),
 		squadFill: safeValue(() => party.squadFill, null),
 		leader: serializeUser(safeValue(() => party.leader, null)),
@@ -409,40 +439,71 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const client = this.requireClient();
 		const party = client.party;
 		const me = party?.me;
+		const selfId = client.user.self.id;
 		const meta = (member, key) => safeValue(() => member?.meta?.get?.(key), null);
-		const build = normalizeBuildId(client.config.partyBuildId);
-		const partyBuild = safeValue(() => party?.meta?.get?.('urn:epic:cfg:build-id_s'), null);
-		const members = collectionValues(party?.members).map((member) => ({
+		const raw = (member, key) => safeValue(() => member?.meta?.schema?.[key], null);
+		const build = normalizeBuildId(client.config?.partyBuildId);
+		const partyBuild = safeValue(() => party?.meta?.get?.('urn:epic:cfg:build-id_s'), null) || null;
+		const allMembers = collectionValues(party?.members);
+		const members = allMembers.map((member) => ({
 			id: member.id,
 			displayName: member.displayName || null,
-			isBot: member.id === client.user.self.id || this.isTrusted(member.id),
+			isBot: member.id === selfId || this.isTrusted(member.id),
 			isLeader: safeValue(() => member.isLeader, false),
-			ready: safeValue(() => meta(member, 'Default:MatchmakingInfo_j')?.MatchmakingInfo?.readyStatus, null),
+			ready: meta(member, 'Default:MatchmakingInfo_j')?.MatchmakingInfo?.readyStatus ?? null,
+			mode: islandOf(member),
+			downloadProgress: raw(member, 'Default:DownloadOnDemandProgress_d'),
+			hasPreloadedAthena: meta(member, 'Default:LobbyState_j')?.LobbyState?.hasPreloadedAthena ?? null,
 			platform: safeValue(() => member.platform, null),
-			crossplay: meta(member, 'Default:CrossplayPreference_s'),
+			crossplay: meta(member, 'Default:CrossplayPreference_s') || null,
 			location: safeValue(() => member.matchInfo?.location, null)
 		}));
-		const playlistId = serializeParty(party)?.playlistId || null;
+		const leader = safeValue(() => party?.leader, null);
+		const leaderRow = members.find((row) => row.id === leader?.id) || members.find((row) => row.isLeader);
+		const meRow = members.find((row) => row.id === selfId);
+		const playlistId = serializeParty(party)?.playlistId || leaderRow?.mode?.linkId || null;
+
 		const problems = [];
 		if (!build) problems.push('The bot does not know the Fortnite build (netCL); it may look like a different game version. Set it under Bots → Lobby behaviour → Fortnite build.');
 		if (build && partyBuild && partyBuild !== build) problems.push(`The party was created with build "${partyBuild}" but the bot now uses "${build}". Make the bot leave and rejoin.`);
-		if (/solo/i.test(playlistId || '') && members.length > 1) problems.push('Solo playlist with more than one member.');
+		if (leaderRow && meRow && leaderRow.id !== meRow.id) {
+			for (const key of ['linkId', 'teamSize', 'buildMode', 'squadFill', 'ranked', 'region']) {
+				if ((leaderRow.mode[key] || null) !== (meRow.mode[key] || null)) {
+					problems.push(`Mode mismatch on ${key}: leader has "${leaderRow.mode[key] ?? '-'}", bot has "${meRow.mode[key] ?? '-'}".`);
+				}
+			}
+			if (leaderRow.downloadProgress && leaderRow.downloadProgress !== meRow.downloadProgress) problems.push(`Download progress differs: leader ${leaderRow.downloadProgress}, bot ${meRow.downloadProgress}.`);
+		}
+		const teamSize = leaderRow?.mode?.teamSize;
+		if (teamSize === 'Solo' && members.length > 1) problems.push('Team size is Solo with more than one member.');
 		if (members.filter((m) => m.isBot).length > 1) problems.push('More than one of your bots is in the party.');
-		if (safeValue(() => party.squadFill, null) === true) problems.push('Fill is on; FNLB recommends No Fill.');
+		if (leaderRow?.mode?.squadFill && leaderRow.mode.squadFill !== 'NoFill') problems.push(`Team fill is "${leaderRow.mode.squadFill}"; FNLB recommends No Fill.`);
 		for (const m of members) if (m.crossplay && m.crossplay !== 'OptedIn') problems.push(`${m.displayName || m.id} has crossplay ${m.crossplay}.`);
+
+		// Every non-cosmetic member field that differs between the bot and the leader.
+		const COSMETIC = /Loadout|Cosmetic|Banner|BattlePass|Emote|Variant|Sidekick|Mimosa|AssistedChallenge|Sticker|Jam|Contrail|Pack|Outfit|Pickaxe|Glider|Shoes|Emoji|Spray|Wrap|Character|Avatar|Lobby_Map/i;
+		const differences = [];
+		if (leader && me && leader.id !== selfId) {
+			const keys = new Set([...Object.keys(safeValue(() => leader.meta.schema, {}) || {}), ...Object.keys(safeValue(() => me.meta.schema, {}) || {})]);
+			for (const key of [...keys].sort()) {
+				if (COSMETIC.test(key)) continue;
+				const theirs = raw(leader, key);
+				const ours = raw(me, key);
+				if (theirs === ours) continue;
+				const cut = (value) => (value == null ? null : String(value).length > 600 ? `${String(value).slice(0, 600)}...` : String(value));
+				differences.push({ key, leader: cut(theirs), bot: cut(ours) });
+			}
+		}
+
 		return {
 			botBuild: build || null,
 			partyBuild,
 			partyId: party?.id || null,
 			playlistId,
-			squadFill: safeValue(() => party.squadFill, null),
-			me: {
-				ready: meta(me, 'Default:MatchmakingInfo_j')?.MatchmakingInfo?.readyStatus ?? null,
-				lobbyState: meta(me, 'Default:LobbyState_j')?.LobbyState ?? null,
-				downloadProgress: meta(me, 'Default:DownloadOnDemandProgress_d')
-			},
+			mirrorLeader: this.mirrorLeaderEnabled(),
 			members,
-			problems
+			problems,
+			differences
 		};
 	}
 
@@ -526,7 +587,12 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		for (const event of ['party:member:readiness:updated', 'party:member:joined', 'party:member:left', 'party:member:kicked']) {
 			client.on(event, () => setImmediate(() => this.syncReadiness()));
 		}
-		client.on('party:member:updated', () => this.syncReadiness());
+		client.on('party:member:updated', (member) => {
+			if (member?.id && member.id !== client.user?.self?.id && safeValue(() => client.party?.leader?.id, null) === member.id) {
+				this.syncFromLeader().catch(() => {});
+			}
+			this.syncReadiness();
+		});
 
 		// Join defaults: whenever the bot lands in a different party (it joined
 		// someone, was invited, or made its own fresh party), it goes back to the
@@ -1067,6 +1133,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 	async setReadiness(ready, { auto = false } = {}) {
 		const { member } = this.requireMember();
+		if (ready) await this.syncFromLeader().catch(() => false);
 		await member.setReadiness(Boolean(ready));
 		// A manual ready/unready takes over from auto-ready until the humans
 		// change readiness again (and from sit-out until the bot changes party).
@@ -1531,7 +1598,8 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		}
 
 		const playlistId = serializeParty(party)?.playlistId || '';
-		if (/solo/i.test(playlistId)) {
+		const leaderIsland = islandOf(safeValue(() => party.leader, null));
+		if (/solo/i.test(playlistId) || leaderIsland.teamSize === 'Solo') {
 			const players = this.humanMembers().length + 1;
 			const fixed = teamPlaylistFor(playlistId, players);
 			if (party.me?.isLeader && fixed) {
@@ -1551,6 +1619,81 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			party.setSquadFill?.(false)?.catch?.(() => {});
 		}
 		return true;
+	}
+
+	mirrorLeaderEnabled() {
+		return this.startConfig.localCategory?.config?.mirrorLeader !== false;
+	}
+
+	/** The party leader when it's a real player (not this bot or the user's other bots). */
+	playerLeader() {
+		const party = this.client?.party;
+		const leader = safeValue(() => party?.leader, null);
+		if (!leader || leader.id === this.client?.user?.self?.id || this.isTrusted(leader.id)) return null;
+		return leader;
+	}
+
+	/**
+	 * In 42.x lobbies every member publishes its own mode selection
+	 * (MatchmakingInfo.islandSelection) and loading state. A real client copies
+	 * the leader's; fnbr never does when the bot isn't leader, so the bot kept
+	 * advertising its default "Build / Solo / EU" while the leader picked e.g.
+	 * Zero Build Duo, and the party could not find a match. Copy the leader's
+	 * selection, download progress and preload flag onto the bot.
+	 */
+	async syncFromLeader() {
+		if (!this.mirrorLeaderEnabled() || this.mirroring) return false;
+		const me = this.client?.party?.me;
+		const leader = this.playerLeader();
+		if (!me || !leader || !this.client?.isReady) return false;
+
+		const theirs = safeValue(() => leader.meta.get('Default:MatchmakingInfo_j')?.MatchmakingInfo, null);
+		const mineData = safeValue(() => me.meta.get('Default:MatchmakingInfo_j'), null) || {};
+		const mine = mineData.MatchmakingInfo || {};
+		const patch = {};
+
+		if (theirs?.islandSelection && (!sameJson(mine.islandSelection, theirs.islandSelection) || (theirs.currentIsland && !sameJson(mine.currentIsland, theirs.currentIsland)))) {
+			patch['Default:MatchmakingInfo_j'] = me.meta.set('Default:MatchmakingInfo_j', {
+				...mineData,
+				MatchmakingInfo: {
+					...mine,
+					islandSelection: theirs.islandSelection,
+					...(theirs.currentIsland ? { currentIsland: theirs.currentIsland } : {}),
+					...(theirs.playlistVersion !== undefined ? { playlistVersion: theirs.playlistVersion } : {})
+				}
+			});
+		}
+
+		const theirDownload = safeValue(() => leader.meta.schema?.['Default:DownloadOnDemandProgress_d'], null);
+		if (theirDownload && theirDownload !== safeValue(() => me.meta.schema?.['Default:DownloadOnDemandProgress_d'], null)) {
+			patch['Default:DownloadOnDemandProgress_d'] = me.meta.set('Default:DownloadOnDemandProgress_d', theirDownload, true);
+		}
+
+		const theirLobby = safeValue(() => leader.meta.get('Default:LobbyState_j')?.LobbyState, null);
+		const myLobbyData = safeValue(() => me.meta.get('Default:LobbyState_j'), null) || {};
+		const myLobby = myLobbyData.LobbyState || {};
+		if (theirLobby && typeof theirLobby.hasPreloadedAthena === 'boolean' && theirLobby.hasPreloadedAthena !== myLobby.hasPreloadedAthena) {
+			patch['Default:LobbyState_j'] = me.meta.set('Default:LobbyState_j', {
+				...myLobbyData,
+				LobbyState: { ...myLobby, hasPreloadedAthena: theirLobby.hasPreloadedAthena }
+			});
+		}
+
+		if (!Object.keys(patch).length) return false;
+		this.mirroring = true;
+		try {
+			await me.sendPatch(patch);
+			if (patch['Default:MatchmakingInfo_j']) {
+				const island = islandOf(leader);
+				this.log(`Matched the leader's mode: ${[island.buildMode, island.teamSize, island.squadFill, island.region].filter(Boolean).join(' · ') || island.linkId || 'updated'}.`, 2);
+			}
+			return true;
+		} catch (error) {
+			this.log(`Could not copy the leader's mode: ${error.message}`, 4);
+			return false;
+		} finally {
+			this.mirroring = false;
+		}
 	}
 
 	/** A player's match location from the event's NEW value (fnbr emits before storing it). */
@@ -1602,7 +1745,9 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	applyAutoReady(want) {
 		if (this.readySyncing) return;
 		this.readySyncing = true;
-		this.setReadiness(want, { auto: true })
+		// Make sure the bot advertises the same mode as the leader before readying.
+		(want ? this.syncFromLeader().catch(() => false) : Promise.resolve(false))
+			.then(() => this.setReadiness(want, { auto: true }))
 			.then(() => this.log(want ? 'Auto-ready: everyone in the lobby is ready.' : 'Auto-ready: a player is no longer ready.', 2))
 			.catch((error) => this.log(`Auto-ready failed: ${error.message}`, 4))
 			.finally(() => {
