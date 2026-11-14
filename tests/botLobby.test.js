@@ -223,9 +223,10 @@ describe('auto-ready', () => {
 		};
 		client.party.members = new Map([['bot', client.party.me], ...humans.map((m) => [m.id, m])]);
 		const runtime = runtimeFor(client, { trustedIds: () => trusted, config });
+		runtime.readyDelayMs = 5;
 		return { client, runtime };
 	}
-	const settle = () => new Promise((resolve) => setImmediate(resolve));
+	const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 	it('readies once every player is ready', async () => {
 		const { client, runtime } = lobby({ humans: [{ id: 'p1', isReady: true }, { id: 'p2', isReady: true }] });
@@ -321,5 +322,87 @@ describe('player stats', () => {
 			throw error;
 		};
 		await assert.rejects(runtimeFor(client).getStats('p1'), (error) => error.status === 403);
+	});
+});
+
+describe('auto-ready event timing (fnbr emits before updating)', () => {
+	it('reacts to the new value, not the stale one fnbr still holds during the event', async () => {
+		const { EventEmitter } = await import('node:events');
+		const client = Object.assign(new EventEmitter(), fakeClient('bot'));
+		client.party.me.id = 'bot';
+		client.party.me.isReady = false;
+		client.party.me.setReadiness = async (ready) => {
+			client.calls.push(['setReadiness', ready]);
+			client.party.me.isReady = ready;
+		};
+		const player = { id: 'p1', isReady: false };
+		client.party.members = new Map([['bot', client.party.me], ['p1', player]]);
+		const runtime = runtimeFor(client);
+		runtime.readyDelayMs = 5;
+		runtime.bindEvents(client);
+
+		// Exactly what fnbr does: emit while the member still has the OLD state,
+		// then apply the update.
+		const playerReadies = () => {
+			client.emit('party:member:readiness:updated', player, true, false);
+			player.isReady = true;
+		};
+		const playerUnreadies = () => {
+			client.emit('party:member:readiness:updated', player, false, true);
+			player.isReady = false;
+		};
+
+		playerReadies();
+		await new Promise((resolve) => setTimeout(resolve, 40));
+		assert.deepEqual(client.calls.filter((c) => c[0] === 'setReadiness'), [['setReadiness', true]], 'bot readies after the player readies');
+
+		playerUnreadies();
+		await new Promise((resolve) => setTimeout(resolve, 40));
+		assert.deepEqual(client.calls.filter((c) => c[0] === 'setReadiness').at(-1), ['setReadiness', false], 'bot unreadies after the player unreadies');
+	});
+
+	it('does not ready while the squad is only partly ready', async () => {
+		const client = fakeClient('bot');
+		client.party.me.id = 'bot';
+		client.party.me.isReady = false;
+		client.party.me.setReadiness = async (ready) => client.calls.push(['setReadiness', ready]);
+		client.party.members = new Map([
+			['bot', client.party.me],
+			['p1', { id: 'p1', isReady: true }],
+			['p2', { id: 'p2', isReady: true }],
+			['p3', { id: 'p3', isReady: false }]
+		]);
+		const runtime = runtimeFor(client);
+		runtime.readyDelayMs = 5;
+		runtime.syncReadiness();
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		assert.equal(client.calls.length, 0);
+	});
+});
+
+describe('loadout', () => {
+	it('equips only the slots given, so the outfit is never reset', async () => {
+		const client = fakeClient('bot');
+		client.party.me.setBackpack = async (id) => client.calls.push(['setBackpack', id]);
+		client.party.me.setPickaxe = async (id) => client.calls.push(['setPickaxe', id]);
+		const result = await runtimeFor(client).setLoadout({ backpack: 'BID_1', pickaxe: 'Pickaxe_ID_2' });
+		assert.deepEqual(client.calls, [['setBackpack', 'BID_1'], ['setPickaxe', 'Pickaxe_ID_2']]);
+		assert.equal(result.applied.length, 2);
+	});
+
+	it('plays the emote last, after the outfit', async () => {
+		const client = fakeClient('bot');
+		await runtimeFor(client).setLoadout({ emote: 'EID_Floss', outfit: 'CID_1' });
+		assert.deepEqual(client.calls.map((c) => c[0]), ['setOutfit', 'setEmote']);
+	});
+
+	it('reports items Epic rejects without failing the rest', async () => {
+		const client = fakeClient('bot');
+		client.party.me.setBackpack = async () => {
+			throw new Error('not owned');
+		};
+		const result = await runtimeFor(client).setLoadout({ outfit: 'CID_1', backpack: 'BID_x' });
+		assert.equal(result.applied.length, 1);
+		assert.equal(result.failed[0].slot, 'backpack');
 	});
 });

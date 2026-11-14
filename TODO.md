@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 101/101 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 106/106 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -193,3 +193,6 @@ modules plus a 167-line wiring file.
 - [x] "Credentials invalid" on a code: clear error, dead code auto-removed, auth banner shows the real reason; obviously wrong pastes (eg1~ tokens, wrong length) refused at save
 - [ ] Not adopted: ThisNils/node-epicgames-client-deviceauth-adapter. It does exchange code → device auth for the old epicgames-client; the same step is built into Sign in with Epic.
 - [!] Needs a real test: Sign in with Epic end to end against Epic
+- [x] Auto-ready was inverted: fnbr emits `party:member:readiness:updated` before it stores the new state, so the bot read the old value. Now it re-checks on the next tick and on `member:updated`, and readies ~1.5 s after the last player
+- [x] Items page reset the skin: a separate slot dropdown reset to "Start outfit" on every render, so the next item replaced the outfit. The slot now comes from the item type
+- [x] Loadout tray (one item per slot, equip all at once, kept in localStorage) + `PATCH /api/bots/:botId/loadout`; Play/Stop emote

@@ -345,36 +345,90 @@ document.addEventListener('click', async (event) => {
 			if (state.selectedBotId) await loadBotDetails(state.selectedBotId, false);
 			render();
 		}
+		// ---- Items: equip / loadout tray / emotes ----
 		if (action === 'equip-item') {
-			const categoryId = document.querySelector('#item-equip-category')?.value;
-			const slot = document.querySelector('#item-equip-slot')?.value;
-			const mode = document.querySelector('#item-equip-mode')?.value || 'replace';
 			const itemId = button.dataset.itemId;
-			const helper = controlledHelper();
-			if (helper && itemId) {
-				// An extra bot equips live only; the saved loadout belongs to the main bot.
-				const result = await api(`/api/bots/${encodeURIComponent(helper.accountId)}/cosmetics`, {
+			const slot = button.dataset.slot;
+			if (!itemId || !slot) throw new Error('This item has no slot a bot can equip.');
+			if (usingLocalFnbr() || controlledHelper()) {
+				// Live, one slot only, so the rest of the outfit is untouched.
+				const helper = controlledHelper();
+				const result = await api(`/api/bots/${encodeURIComponent(activeBotId())}/cosmetics`, {
 					method: 'PATCH',
-					body: { slot, itemId }
+					body: { slot, itemId, saveDefault: !helper && state.itemsKeep !== false }
 				});
-				setToast(result?.content ? `${helper.label}: ${result.content}` : `Equipped on ${helper.label}.`);
+				setToast(`${helper ? `${helper.label}: ` : ''}${result?.content || 'Equipped.'}`);
 				render();
 				return;
 			}
-			if (!categoryId || !itemId) throw new Error('Choose a category and item first.');
+			const categoryId = document.querySelector('#item-equip-category')?.value;
+			const mode = document.querySelector('#item-equip-mode')?.value || 'replace';
+			if (!categoryId) throw new Error('Choose a category first.');
+			const startSlot = { outfit: 'startOutfit', backpack: 'startBackpack', pickaxe: 'startPickaxe', shoes: 'startShoes', emote: 'joinEmote' }[slot];
 			const equipResult = await api(`/api/fnlb/categories/${encodeURIComponent(categoryId)}/cosmetics`, {
 				method: 'PATCH',
-				body: { slot, itemId, mode }
+				body: { slot: startSlot, itemId, mode }
 			});
 			await loadDashboard(false);
-			// Only claim a live change when the runtime actually confirmed one.
 			setToast(
 				equipResult?.appliedLive
 					? 'Equipped on the running bot. No restart needed.'
-					: equipResult?.content ||
-							'Saved as the startup loadout. It applies the next time the bot loads.'
+					: equipResult?.content || 'Saved to the category. It applies the next time the bot loads.'
 			);
 			render();
+			return;
+		}
+		if (action === 'tray-add') {
+			const item = state.itemSearchResults.find((row) => row.id === button.dataset.itemId);
+			const slot = button.dataset.slot;
+			if (!item || !slot) return;
+			state.loadoutTray = { ...state.loadoutTray, [slot]: { id: item.id, name: item.name, image: item.image } };
+			saveTray();
+			render();
+			return;
+		}
+		if (action === 'tray-remove') {
+			const next = { ...state.loadoutTray };
+			delete next[button.dataset.slot];
+			state.loadoutTray = next;
+			saveTray();
+			render();
+			return;
+		}
+		if (action === 'tray-clear') {
+			state.loadoutTray = {};
+			saveTray();
+			render();
+			return;
+		}
+		if (action === 'tray-equip') {
+			const items = Object.fromEntries(Object.entries(state.loadoutTray || {}).map(([slot, item]) => [slot, item.id]));
+			const helper = controlledHelper();
+			const result = await api(`/api/bots/${encodeURIComponent(activeBotId())}/loadout`, {
+				method: 'PATCH',
+				body: { items, saveDefault: !helper && state.itemsKeep !== false }
+			});
+			setToast(`${helper ? `${helper.label}: ` : ''}${result.content}${result.savedAsDefault ? ' Saved for next start.' : ''}`, result.failed?.length ? 'error' : 'info');
+			render();
+			return;
+		}
+		if (action === 'emote-play') {
+			const result = await api(`/api/bots/${encodeURIComponent(activeBotId())}/cosmetics`, {
+				method: 'PATCH',
+				body: { slot: 'emote', itemId: button.dataset.itemId }
+			});
+			setToast(result?.content || 'Emote playing.');
+			render();
+			return;
+		}
+		if (action === 'emote-stop') {
+			const result = await api(`/api/bots/${encodeURIComponent(activeBotId())}/cosmetics`, {
+				method: 'PATCH',
+				body: { clearEmote: true }
+			});
+			setToast(result?.content || 'Emote stopped.');
+			render();
+			return;
 		}
 		if (action === 'close-bot-detail') {
 			state.selectedBotId = null;
@@ -637,6 +691,8 @@ document.addEventListener('submit', async (event) => {
 			render();
 		}
 		if (form.dataset.form === 'item-search') {
+			state.itemSearchQuery = data.q;
+			state.itemSearchType = data.type || '';
 			const result = await api(`/api/fortnite/items?q=${encodeURIComponent(data.q)}&type=${encodeURIComponent(data.type || '')}`);
 			state.itemSearchResults = result.items || [];
 			render();
@@ -663,6 +719,8 @@ document.addEventListener('change', (event) => {
 	if (autoRefresh) state.autoRefresh = autoRefresh.checked;
 	const engineSelect = event.target.closest('[data-action="config-engine"]');
 	if (engineSelect) showEngineFields(engineSelect.form, engineSelect.value);
+	const keep = event.target.closest('[data-action="items-keep"]');
+	if (keep) state.itemsKeep = keep.checked;
 	const epicAck = event.target.closest('[data-action="epic-code-ack"]');
 	if (epicAck) {
 		state.epicCodeAck = epicAck.checked;
@@ -918,4 +976,19 @@ function pollEpicLogin() {
 			render();
 		}
 	}, Math.max(3, login.interval || 5) * 1000);
+}
+
+// The loadout tray is a per-browser convenience, so it survives a reload.
+const TRAY_KEY = 'lobbybot.loadoutTray';
+function saveTray() {
+	try {
+		localStorage.setItem(TRAY_KEY, JSON.stringify(state.loadoutTray || {}));
+	} catch {
+		// Storage can be unavailable (private mode); the tray still works in memory.
+	}
+}
+try {
+	state.loadoutTray = JSON.parse(localStorage.getItem(TRAY_KEY) || '{}') || {};
+} catch {
+	state.loadoutTray = {};
 }

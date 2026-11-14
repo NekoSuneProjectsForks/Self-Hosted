@@ -149,7 +149,11 @@ Lobby page.
 closed when it returns to the lobby, so one bot session contains many rounds.
 
 **Cosmetics** — outfit, backpack, pickaxe, shoes and emote change on the running
-bot immediately. "Equip Now" and "Save as Startup Loadout" are separate actions:
+bot immediately. On the Items page, the slot comes from each item's type, so
+equipping Back Bling never replaces the Outfit. **Add to loadout** collects one
+item per slot, and **Equip loadout** applies them all at once (the emote goes
+last). Emotes have **Play emote** and **Stop emote**. **Keep after restart** also
+saves what you equip as the startup loadout. "Equip Now" and "Save as Startup Loadout" are separate actions:
 saving a default never forces a restart, and equipping is only reported as
 successful once the runtime confirms it.
 
@@ -202,7 +206,9 @@ loop.
 
 ### Auto-ready and lobby chat commands
 
-- **Auto-ready**: every bot readies up once every player in the lobby is ready.
+- **Auto-ready**: every bot readies up once every player in the lobby is ready,
+  about 1.5 s after the last player, so the bots always ready last (in a duo,
+  trio or squad, after all the others).
   Sitting out counts as done, and your own bots don't count as players. If a
   player unreadies, the bots unready too, but a bot you readied by hand with
   `!ready` or the dashboard stays ready.

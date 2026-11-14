@@ -56,6 +56,10 @@ export class BaseRuntime {
 		throw this.unsupported('dashboard');
 	}
 
+	async setLoadout() {
+		throw this.unsupported('loadouts');
+	}
+
 	async getStats() {
 		throw this.unsupported('player stats');
 	}

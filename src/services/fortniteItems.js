@@ -22,7 +22,10 @@ export async function searchFortniteCosmetics(query, type = '') {
 				id: item.id,
 				name: item.name,
 				description: item.description,
-				type: item.type?.displayValue || item.type?.value,
+				// `type` is the stable id (outfit, backpack, pickaxe, emote, shoes...),
+				// used to pick the slot; `typeLabel` is what to show.
+				type: item.type?.value || null,
+				typeLabel: item.type?.displayValue || item.type?.value || null,
 				rarity: item.rarity?.displayValue || item.rarity?.value,
 				image: item.images?.smallIcon || item.images?.icon,
 				variants: item.variants || []

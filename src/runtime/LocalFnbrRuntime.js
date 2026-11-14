@@ -316,6 +316,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			clearTimeout(this.snapshotTimer);
 			this.snapshotTimer = null;
 		}
+		if (this.readyTimer) {
+			clearTimeout(this.readyTimer);
+			this.readyTimer = null;
+		}
 		this.health = { epicAuth: 'disconnected', xmpp: 'disconnected', stomp: 'disconnected', party: 'disconnected' };
 		if (!this.client) return;
 		const client = this.client;
@@ -358,9 +362,15 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 		// Auto-ready: follow the humans in the lobby. Each of the user's bots
 		// runs this independently, so every bot in the party converges.
+		// fnbr emits readiness:updated BEFORE it stores the member's new state,
+		// so reading member.isReady inside the handler gives the OLD value (that
+		// made the bot ready up when a player unreadied). Re-check on the next
+		// tick, after fnbr has applied the update, and again on member:updated,
+		// which fires after it.
 		for (const event of ['party:member:readiness:updated', 'party:member:joined', 'party:member:left', 'party:member:kicked']) {
-			client.on(event, () => this.syncReadiness());
+			client.on(event, () => setImmediate(() => this.syncReadiness()));
 		}
+		client.on('party:member:updated', () => this.syncReadiness());
 
 		client.on('party:member:message', (message) => {
 			this.handlePartyCommand(message).catch((error) => this.log(`Party command failed: ${error.message}`, 4));
@@ -978,6 +988,42 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		return this.setCosmetic('emote', itemId);
 	}
 
+	/**
+	 * Equips several slots at once ("inventory" loadout). Only the slots given
+	 * change, so equipping a backpack never touches the outfit. The emote goes
+	 * last so it plays wearing the new outfit.
+	 */
+	async setLoadout(items = {}) {
+		const { member } = this.requireMember();
+		const applied = [];
+		const failed = [];
+		for (const slot of ['outfit', 'backpack', 'pickaxe', 'shoes', 'emote']) {
+			const itemId = String(items?.[slot] || '').trim();
+			if (!itemId) continue;
+			try {
+				await member[COSMETIC_SLOTS[slot]](itemId);
+				applied.push({ slot, itemId });
+			} catch (error) {
+				failed.push({ slot, itemId, error: error.message });
+			}
+		}
+		if (!applied.length && !failed.length) throw runtimeError(400, 'Pick at least one item for the loadout.');
+		const cosmetics = this.toBotCard().cosmetics;
+		this.emit('cosmetics:updated', { botId: this.botId(), cosmetics });
+		this.queueSnapshot();
+		if (failed.length) this.log(`Some loadout items were rejected: ${failed.map((row) => `${row.slot} (${row.error})`).join(', ')}`, 4);
+		return {
+			content: failed.length
+				? `Equipped ${applied.length}, rejected ${failed.length}: ${failed.map((row) => `${row.slot} ${row.error}`).join('; ')}`
+				: `Loadout equipped (${applied.map((row) => row.slot).join(', ')}).`,
+			format: failed.length ? 4 : 1,
+			source: 'fnbr',
+			applied,
+			failed,
+			cosmetics
+		};
+	}
+
 	async clearEmote() {
 		const { member } = this.requireMember();
 		await member.clearEmote();
@@ -1009,22 +1055,44 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 * counts as done), and unreadies it again when one of them backs out.
 	 * It only undoes a ready it set itself, so a manual !ready is kept.
 	 */
+	/** True when every player in the lobby is ready (sitting out counts as done). */
+	everyoneReady() {
+		const humans = this.humanMembers();
+		const ready = (member) => safeValue(() => member.isReady, false);
+		const done = (member) => ready(member) || safeValue(() => member.isSittingOut, false);
+		return humans.length > 0 && humans.every(done) && humans.some(ready);
+	}
+
 	syncReadiness() {
 		if (!this.autoReadyEnabled() || this.readySyncing) return;
 		const me = this.client?.party?.me;
 		if (!me || !this.client?.isReady) return;
 
-		const humans = this.humanMembers();
-		const ready = (member) => safeValue(() => member.isReady, false);
-		const done = (member) => ready(member) || safeValue(() => member.isSittingOut, false);
-		const everyoneReady = humans.length > 0 && humans.every(done) && humans.some(ready);
+		const everyoneReady = this.everyoneReady();
 		const botReady = safeValue(() => me.isReady, false);
 
-		let want = null;
-		if (everyoneReady && !botReady) want = true;
-		else if (!everyoneReady && botReady && this.autoReadied) want = false;
-		if (want === null) return;
+		if (!everyoneReady && this.readyTimer) {
+			clearTimeout(this.readyTimer);
+			this.readyTimer = null;
+		}
 
+		if (everyoneReady && !botReady) {
+			// Ready LAST: give the players a moment, then confirm they are all
+			// still ready before the bot readies.
+			if (this.readyTimer) return;
+			this.readyTimer = setTimeout(() => {
+				this.readyTimer = null;
+				if (!this.everyoneReady() || safeValue(() => this.client?.party?.me?.isReady, false)) return;
+				this.applyAutoReady(true);
+			}, this.readyDelayMs ?? 1500);
+			this.readyTimer.unref?.();
+			return;
+		}
+		if (!everyoneReady && botReady && this.autoReadied) this.applyAutoReady(false);
+	}
+
+	applyAutoReady(want) {
+		if (this.readySyncing) return;
 		this.readySyncing = true;
 		this.setReadiness(want, { auto: true })
 			.then(() => this.log(want ? 'Auto-ready: everyone in the lobby is ready.' : 'Auto-ready: a player is no longer ready.', 2))

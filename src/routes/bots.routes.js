@@ -281,13 +281,35 @@ export function registerBotRoutes(ctx) {
 			// confirmed the item was accepted.
 			const applied = await adapter.setCosmetic(slot, itemId, { categoryId: req.body.categoryId });
 
-			if (req.body.saveDefault) {
-				const startSlot = `start${slot[0].toUpperCase()}${slot.slice(1)}`;
+			if (req.body.saveDefault && !/emote/i.test(slot)) {
+				const bare = slot.replace(/^start/i, '').toLowerCase();
+				const startSlot = `start${bare[0].toUpperCase()}${bare.slice(1)}`;
 				await updateLocalCategoryConfig(req.user.id, async (nextConfig) => {
 					equipCosmetic(nextConfig, startSlot, itemId, 'replace');
 				}).catch(() => {});
 			}
 			return res.json(applied);
+		})
+	);
+
+	// Equip several slots at once. Only the slots sent change.
+	app.patch(
+		'/api/bots/:botId/loadout',
+		requireAuth,
+		requireActive,
+		asyncRoute(async (req, res) => {
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
+			const items = req.body?.items || {};
+			const result = await adapter.setLoadout(items);
+			if (req.body?.saveDefault && result.applied.length) {
+				const startSlots = { outfit: 'startOutfit', backpack: 'startBackpack', pickaxe: 'startPickaxe', shoes: 'startShoes', emote: 'joinEmote' };
+				const localCategory = await updateLocalCategoryConfig(req.user.id, async (nextConfig) => {
+					for (const { slot, itemId } of result.applied) equipCosmetic(nextConfig, startSlots[slot], itemId, 'replace');
+				}).catch(() => null);
+				if (localCategory) runtime.applyLocalCategoryLive(req.user.id, localCategory);
+				result.savedAsDefault = Boolean(localCategory);
+			}
+			return res.json(result);
 		})
 	);
 
