@@ -6,6 +6,7 @@ import {
 	setTrackedPlayerEnabled,
 	trackedMatches
 } from '../services/playerTracker.js';
+import { fnlbQueues } from '../services/fnlbQueues.js';
 
 /**
  * Player match tracking (works with any engine, including Legacy FNLB bot
@@ -28,7 +29,8 @@ export function registerTrackedPlayerRoutes(ctx) {
 						server: source === runtime.serverTracker?.adapter
 					}
 				: null,
-			...(await trackedMatches(userId))
+			...(await trackedMatches(userId)),
+			fnlbQueues: await fnlbQueues(userId)
 		};
 	};
 

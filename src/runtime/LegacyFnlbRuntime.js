@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BaseRuntime, runtimeError } from './BaseRuntime.js';
 import { fnlbDataDir } from '../lib/paths.js';
+import { parseFnlbLog } from './fnlbLogParser.js';
 import {
 	fetchFnlbBotDetails,
 	fetchFnlbBots,
@@ -53,6 +54,7 @@ const FNLB_COMMANDS = {
 export class LegacyFnlbRuntime extends BaseRuntime {
 	constructor(options) {
 		super({ ...options, engine: 'fnlb' });
+		this.onFnlbMatchmaking = options.onFnlbMatchmaking;
 		this.manager = null;
 		this.plainConfig = options.plainConfig;
 		this.apiToken = options.plainConfig?.apiToken || '';
@@ -108,8 +110,8 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 		this.manager = new FNLB({
 			clusterName: this.plainConfig.clusterName,
 			fnlbPath: clusterDir,
-			onLogMessage: (message) => this.appendLog(this.userId, message.content, message.format),
-			onSubProcessLogMessage: (message) => this.appendLog(this.userId, message.content, message.format)
+			onLogMessage: (message) => this.handleLog(message),
+			onSubProcessLogMessage: (message) => this.handleLog(message)
 		});
 
 		this.log(`Starting legacy FNLB cluster ${this.plainConfig.clusterName}...`, 2);
@@ -126,6 +128,13 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 			categories: categories?.length ? categories : undefined,
 			bots: bots?.length ? bots : undefined
 		};
+	}
+
+	/** Passes FNLB's log through and picks matchmaking events out of it. */
+	handleLog(message) {
+		this.appendLog(this.userId, message.content, message.format);
+		const event = parseFnlbLog(message.content);
+		if (event) this.onFnlbMatchmaking?.(this.userId, event);
 	}
 
 	async stop() {

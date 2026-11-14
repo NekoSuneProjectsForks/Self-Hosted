@@ -131,6 +131,16 @@ export function connectSocket() {
 		render();
 	});
 
+	state.socket.on('fnlb:queue', () => {
+		if (state.view !== 'matches') return;
+		api('/api/tracked-players')
+			.then((data) => {
+				state.tracked = data;
+				renderIfVisible('matches');
+			})
+			.catch(() => {});
+	});
+
 	state.socket.on('tracked:updated', () => {
 		if (state.view !== 'matches') return;
 		api('/api/tracked-players')

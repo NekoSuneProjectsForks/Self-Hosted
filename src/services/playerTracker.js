@@ -38,13 +38,37 @@ export function groupStats(raw = {}) {
 	return rows;
 }
 
-/** "playlist_nobuildbr_duo" → "Zero Build · Duo" (best effort, raw ID kept too). */
+/**
+ * "playlist_nobuildbr_duo" → "Zero Build · Duo". Playlist IDs follow FNLB's
+ * 43.x map: default and trios = Build, nobuildbr = Zero Build, figment = OG,
+ * forbiddenfruit = Blitz. Unknown IDs come back as they are.
+ */
 export function playlistLabel(playlist = '') {
-	const id = String(playlist).toLowerCase().replace(/^playlist_/, '');
-	const team = /solo/.test(id) ? 'Solo' : /duo/.test(id) ? 'Duo' : /trio/.test(id) ? 'Trio' : /squad/.test(id) ? 'Squad' : null;
-	const mode = /nobuild|zerobuild/.test(id) ? 'Zero Build' : /habanero|ranked/.test(id) ? 'Ranked' : /respawn|reload/.test(id) ? 'Reload' : /defaultsolo|defaultduo|defaulttrio|defaultsquad|^br_|_br_/.test(id) || /^default/.test(id) ? 'Build' : null;
+	const raw = String(playlist ?? '');
+	const id = raw.toLowerCase().replace(/^playlist_/, '');
+	if (!id) return raw;
+	const team = /sixstack|stack$/.test(id)
+		? 'Six Stack'
+		: /quint/.test(id)
+			? 'Quint'
+			: /solo/.test(id)
+				? 'Solo'
+				: /duo/.test(id)
+					? 'Duo'
+					: /trio/.test(id)
+						? 'Trio'
+						: /squad/.test(id)
+							? 'Squad'
+							: null;
+	let mode = null;
+	if (/forbiddenfruit|blitz/.test(id)) mode = 'Blitz';
+	else if (/figment/.test(id)) mode = /nobuild/.test(id) ? 'OG Zero Build' : 'OG';
+	else if (/habanero|ranked/.test(id)) mode = /nobuild/.test(id) ? 'Ranked Zero Build' : 'Ranked';
+	else if (/respawn|reload|punchberry/.test(id)) mode = 'Reload';
+	else if (/nobuild|zerobuild/.test(id)) mode = 'Zero Build';
+	else if (/^default|^trios$|^br_|_br_/.test(id)) mode = 'Build';
 	const parts = [mode, team].filter(Boolean);
-	return parts.length ? parts.join(' · ') : playlist;
+	return parts.length ? parts.join(' · ') : raw;
 }
 
 const INPUT_LABELS = { keyboardmouse: 'Keyboard & mouse', gamepad: 'Controller', touch: 'Touch' };

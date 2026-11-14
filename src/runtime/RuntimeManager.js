@@ -14,6 +14,7 @@ import { BotLog, FriendMessage, pruneLogs } from '../models/index.js';
 import { closeActiveSessions, recordBotSnapshot } from '../services/sessionHistory.js';
 import { closeMatchRound, openMatchRound } from '../services/matchTracker.js';
 import { pollUserPlayers, usersWithTrackedPlayers } from '../services/playerTracker.js';
+import { recordFnlbMatchmaking } from '../services/fnlbQueues.js';
 import { getTrackerSettings, updateTrackerSettings } from '../services/serverSettings.js';
 import { trackerCategory } from './LocalFnbrRuntime.js';
 
@@ -363,7 +364,9 @@ export class RuntimeManager {
 			emit: (event, payload) => this.emitTo(userId, event, payload)
 		};
 
-		if (startConfig.mode === 'fnlb') return new LegacyFnlbRuntime(shared);
+		if (startConfig.mode === 'fnlb') {
+			return new LegacyFnlbRuntime({ ...shared, onFnlbMatchmaking: (id, event) => this.handleFnlbMatchmaking(id, event) });
+		}
 
 		return new LocalFnbrRuntime({
 			...shared,
@@ -373,6 +376,20 @@ export class RuntimeManager {
 			onMatchState: (id, event) => this.handleMatchState(id, event),
 			trustedIds: () => this.helperAccountIds(userId)
 		});
+	}
+
+	/** FNLB engine: queue start/result read from FNLB's log (bot-lobby history). */
+	async handleFnlbMatchmaking(userId, event) {
+		try {
+			const round = await recordFnlbMatchmaking(userId, event);
+			if (event.type === 'success') {
+				const quality = event.realPlayers === 1 ? ' (bot lobby: you were the only real player)' : event.realPlayers ? ` (${event.realPlayers} real players)` : '';
+				this.appendLog(userId, `Bot lobby match found for ${event.bot}: ${event.playlist}${quality}.`, 1);
+			}
+			if (round) this.emitTo(userId, 'fnlb:queue', { round });
+		} catch (error) {
+			this.appendLog(userId, `Could not record FNLB matchmaking: ${error.message}`, 4);
+		}
 	}
 
 	async handleFriendMessage(userId, message) {

@@ -191,10 +191,58 @@ function trackingPanel() {
 	`;
 }
 
+function queueOutcome(queue) {
+	if (queue.status === 'matchmaking') return statusBadge('starting', 'In queue');
+	if (queue.outcome === 'matched') {
+		if (queue.realPlayers === 1) return statusBadge('online', 'Bot lobby');
+		if (queue.realPlayers) return statusBadge('restarting', `${queue.realPlayers} real players`);
+		return statusBadge('online', 'Matched');
+	}
+	if (queue.outcome === 'failed') return statusBadge('error', 'Failed');
+	return statusBadge('offline', queue.outcome || 'Ended');
+}
+
+/** Legacy FNLB engine: each queue FNLB's bot reported (read from its log). */
+function fnlbQueuePanel() {
+	const queues = state.tracked?.fnlbQueues || [];
+	if (!queues.length && controlCapabilities()?.engine !== 'fnlb') return '';
+	const matched = queues.filter((q) => q.outcome === 'matched');
+	const botLobbies = matched.filter((q) => q.realPlayers === 1).length;
+	return `
+		<section class="shell-panel rounded-lg p-4">
+			<div class="mb-3">
+				<h2 class="font-semibold">FNLB bot lobby queues</h2>
+				<p class="mt-1 text-xs text-zinc-500">From the Legacy FNLB engine's log. "Bot lobby" means you were the only real player in the match. ${matched.length ? `${botLobbies}/${matched.length} recent matches were bot lobbies.` : ''}</p>
+			</div>
+			<div class="grid gap-2">
+				${
+					queues.length
+						? queues
+								.map(
+									(queue) => `
+					<div class="card flex flex-wrap items-center justify-between gap-2">
+						<div class="min-w-0">
+							<p class="font-semibold">${escapeHtml(queue.playlistLabel || queue.playlistId || 'Queue')}</p>
+							<p class="mt-1 text-xs text-zinc-500">${escapeHtml(queue.bot)} · ${formatDate(queue.startedAt)}${queue.region ? ` · ${escapeHtml(queue.region)}` : ''}${queue.reason ? ` · ${escapeHtml(queue.reason)}` : ''}</p>
+						</div>
+						<div class="flex shrink-0 items-center gap-3 text-sm">
+							${queue.queueSeconds !== null && queue.queueSeconds !== undefined ? `<span class="text-zinc-500">${formatDuration(queue.queueSeconds)} queue</span>` : ''}
+							${queueOutcome(queue)}
+						</div>
+					</div>`
+								)
+								.join('')
+						: '<p class="text-sm text-zinc-500">No queues yet. Ready up with your FNLB bot in the party.</p>'
+				}
+			</div>
+		</section>`;
+}
+
 export function renderMatches() {
 	if (!can('matchTracking')) {
 		return `
 			<div class="grid gap-4">
+				${fnlbQueuePanel()}
 				${trackingPanel()}
 				<div class="shell-panel rounded-lg p-4">
 					<p class="text-sm text-zinc-500">Live bot match rounds aren't reported by the ${escapeHtml(controlCapabilities()?.engine || 'active')} engine; player tracking above still works.</p>
@@ -206,6 +254,7 @@ export function renderMatches() {
 	const matches = state.matches || [];
 	return `
 		<div class="grid gap-4">
+			${fnlbQueuePanel()}
 			${trackingPanel()}
 			${currentMatchPanel()}
 

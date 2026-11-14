@@ -386,6 +386,19 @@ Epic updates stats a few minutes after a match ends. The first check only
 stores a starting point. If the server tracker is off, a member's own running
 local bot reads their stats instead.
 
+### FNLB bot lobby queues
+
+With the Legacy FNLB engine, the Matches page also lists every queue FNLB's bot
+reports in its log (`Starting matchmaking [v3]`, `Matchmaking ended
+successfully (...). Real players in the match: N`). It shows the mode, region,
+queue time and whether it was a real bot lobby (you were the only real player).
+
+FNLB's log also shows how its bot lobbies work: FNLB's own bot requests a
+matchmaking ticket (Matchmaking V3, with a `ticketId`) through FNLB's private
+gateway servers (`fnlbgw-*.on.tnfangel.net`). The local engine has no such
+gateway and can't make the signed ticket request a real client makes. That's
+why bot lobbies need the Legacy FNLB engine.
+
 ## Admin panel
 
 - **Overview**: members, bots online, tracked players, matches today, server
