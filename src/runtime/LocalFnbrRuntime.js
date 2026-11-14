@@ -1570,7 +1570,9 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 	/** Experimental, off by default: echo the leader's queue progress in the bot's own slot. */
 	followLeaderQueue() {
-		return this.startConfig.localCategory?.config?.followLeaderQueue === true && !this.leaveWhenQueueStarts();
+		// Disabled: echoing the leader's barriers crashed the leader's PS5 twice
+		// (CE-108255-1). Kept for the code path only; never turns on.
+		return false;
 	}
 
 	/** Fallback, off by default: step out when the leader readies, rejoin after. */
