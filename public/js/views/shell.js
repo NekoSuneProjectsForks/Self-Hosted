@@ -123,7 +123,9 @@ export function renderShell() {
 					<button class="btn-secondary lg:hidden" data-action="logout" title="Logout">${icon('log-out')}</button>
 				</div>
 				<nav class="grid gap-4">${renderNav()}</nav>
-				<div class="mt-auto hidden lg:block">
+				<div class="mt-auto hidden gap-2 lg:grid">
+					<a class="nav-item" href="/public-lists" target="_blank" rel="noopener">${icon('globe')} Public bot list</a>
+					<a class="nav-item" href="/">${icon('house')} Homepage</a>
 					<button class="btn-secondary w-full" data-action="logout">${icon('log-out')} Logout</button>
 				</div>
 			</aside>

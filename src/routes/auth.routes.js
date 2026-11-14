@@ -124,7 +124,7 @@ export function registerAuthRoutes(ctx) {
 				expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS)
 			});
 
-			const resetUrl = `${resetLinkBase(req)}/?reset_token=${token}`;
+			const resetUrl = `${resetLinkBase(req)}/login?reset_token=${token}`;
 			try {
 				await sendPasswordResetEmail({
 					to: user.email,

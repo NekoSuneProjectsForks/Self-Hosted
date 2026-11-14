@@ -75,7 +75,7 @@ export function renderAuthForm() {
 			${loginActive ? `
 				<button type="button" class="w-full text-center text-sm text-zinc-400 hover:text-fnlb-300" data-auth-mode="forgot">Forgot your password?</button>
 			` : ''}
-			<a class="flex w-full items-center justify-center gap-2 text-center text-sm text-zinc-400 hover:text-fnlb-300" href="/community">${icon('globe', 'h-4 w-4')} Browse community bots (no login)</a>
+			<a class="flex w-full items-center justify-center gap-2 text-center text-sm text-zinc-400 hover:text-fnlb-300" href="/public-lists">${icon('globe', 'h-4 w-4')} Browse community bots (no login)</a>
 		</form>
 	`;
 }

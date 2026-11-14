@@ -83,7 +83,8 @@ export async function createServer() {
 	app.use(express.json({ limit: '1mb' }));
 	app.use(sessionMiddleware);
 	app.use('/vendor/lucide', express.static(join(rootDir, 'node_modules', 'lucide', 'dist', 'umd')));
-	app.use(express.static(publicDir));
+	// index: false so "/" is the homepage, not the dashboard app.
+	app.use(express.static(publicDir, { index: false }));
 
 	app.use(
 		asyncRoute(async (req, _res, next) => {
@@ -160,9 +161,22 @@ export async function createServer() {
 		socket.emit('bot:status', runtime.serialize(socket.user.id));
 	});
 
+	// Pages:
+	//   /              homepage (about the platform and the public bot list)
+	//   /public-lists  public bot list (no login)
+	//   /login         login, /register registration (the dashboard app)
+	//   /dashboard     the dashboard app (needs login)
+	app.get('/', (req, res) => {
+		// Reset links from before the move pointed at "/".
+		if (req.query.reset_token) return res.redirect(302, `/login?reset_token=${encodeURIComponent(String(req.query.reset_token))}`);
+		return res.sendFile(join(publicDir, 'home.html'));
+	});
+	app.get(['/login', '/register'], (_req, res) => res.sendFile(join(publicDir, 'index.html')));
+	app.get(/^\/dashboard(\/.*)?$/, (_req, res) => res.sendFile(join(publicDir, 'index.html')));
 	app.get(/.*/, (req, res, next) => {
-		if (req.path.startsWith('/api/')) return next();
-		res.sendFile(join(publicDir, 'index.html'));
+		// API calls and missing files 404; any other unknown page goes home.
+		if (req.path.startsWith('/api/') || /\.[a-z0-9]+$/i.test(req.path)) return next();
+		return res.redirect(302, '/');
 	});
 
 	app.use((req, res, next) => {

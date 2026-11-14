@@ -239,4 +239,5 @@ modules plus a 167-line wiring file.
 - [x] Community list shows only available bots: running + not banned (FNLB mmsBannedUntil / invalid auth / disabled, cached 2 min per owner) + free (party size 1; local: not matchmaking/in match). Busy ones hidden until free and only counted; owners see the reason
 - [ ] Local engine bans: Epic doesn't expose MMS bans to fnbr; a banned local account just fails to log in (shows offline)
 - [x] FNLB categories on Community listing: grouped by booted categories, All private / All public per category (stored as fnlb-cat; new bots inherit), per-bot override still works
+- [x] Pages: / homepage (about + live counts + status meanings), /public-lists (was /community, 301), /login + /register, /dashboard (the app). URL kept in sync; reset links → /login
 - [!] "Bot doesn't see me join" when the bot leads (e.g. it stayed behind after the crash): likely the 42.x bot-as-captain lobby issue (Fortnite-LobbyBot/fnbr.js#11). Workaround: the player leads and invites the bot

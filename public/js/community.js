@@ -62,7 +62,7 @@ function render() {
 						<p class="text-sm text-zinc-500">Lobby bots shared by members of this server.</p>
 					</div>
 				</div>
-				<a class="btn-secondary" href="/">${icon('log-in')} Member login</a>
+				<div class="flex gap-2"><a class="btn-secondary" href="/">${icon('house')} Home</a><a class="btn-secondary" href="/login">${icon('log-in')} Member login</a></div>
 			</header>
 
 			<section class="shell-panel mb-6 rounded-xl p-4 text-sm text-zinc-300">

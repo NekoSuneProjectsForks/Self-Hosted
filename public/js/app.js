@@ -58,7 +58,26 @@ function restoreFields({ saved, focus }) {
 	}
 }
 
+/**
+ * Keep the address bar in step with what's shown: /login or /register when
+ * signed out (a reset link keeps its ?reset_token), /dashboard when signed in.
+ */
+function syncPath() {
+	const { pathname, search, hash } = window.location;
+	let want;
+	if (state.user) {
+		want = pathname.startsWith('/dashboard') ? pathname : '/dashboard';
+	} else {
+		want = state.authMode === 'register' ? '/register' : '/login';
+	}
+	if (want !== pathname) {
+		const keep = !state.user && new URLSearchParams(search).has('reset_token') ? search : '';
+		window.history.replaceState({}, document.title, `${want}${keep}${state.user ? hash : ''}`);
+	}
+}
+
 function render() {
+	syncPath();
 	const fields = state.user ? captureFields() : null;
 	app.innerHTML = state.user ? renderShell() : renderAuth();
 	if (fields) restoreFields(fields);
@@ -91,6 +110,7 @@ setInterval(async () => {
 }, 15000);
 
 (async function init() {
+	if (window.location.pathname === '/register') state.authMode = 'register';
 	try {
 		// A password reset link always takes priority over any existing session.
 		if (detectResetToken()) {

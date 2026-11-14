@@ -415,9 +415,24 @@ gateway servers (`fnlbgw-*.on.tnfangel.net`). The local engine has no such
 gateway and can't make the signed ticket request a real client makes. That's
 why bot lobbies need the Legacy FNLB engine.
 
+## Pages
+
+| Path | What | Login |
+|---|---|---|
+| `/` | Homepage: what the platform is, live public-bot counts, how to use a public bot, and what Free / In use / Offline / Banned / Private mean | No |
+| `/public-lists` | The public bot list (only bots free right now) | No |
+| `/login`, `/register` | Log in or create an account (when registration is open) | No |
+| `/dashboard` | The dashboard (everything that used to be on `/`) | Yes |
+
+Old links keep working: `/community` redirects to `/public-lists`, and reset
+links that pointed at `/?reset_token=…` go to `/login?reset_token=…` (new
+reset emails link there directly). Signed-out visits to `/dashboard` go to
+`/login`, and after logging in you land on `/dashboard`. Unknown pages go to
+the homepage.
+
 ## Community bots (public list)
 
-**`/community`** is a public page (no login) listing bots their owners chose
+**`/public-lists`** is a public page (no login) listing bots their owners chose
 to share. Each member decides per bot on **Bots → Community listing**:
 
 - **Public**: shown on the community page **only while it's available**:

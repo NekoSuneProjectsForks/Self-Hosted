@@ -179,7 +179,7 @@ function listingState(bot) {
 	return `<p class="mt-1 text-xs ${bot.state === 'banned' || bot.state === 'disabled' ? 'text-red-300' : 'text-amber-200'}">${icon('eye-off', 'inline h-3 w-3')} ${label}${until}${bot.reason ? ` · ${escapeHtml(bot.reason)}` : ''}</p>`;
 }
 
-/** Community listing: each bot Public (on /community) or Private. */
+/** Community listing: each bot Public (on /public-lists) or Private. */
 function communityPanel() {
 	const data = state.listings;
 	const bots = data?.bots || [];
@@ -212,9 +212,9 @@ function communityPanel() {
 			<div class="mb-3 flex flex-wrap items-start justify-between gap-2">
 				<div>
 					<p class="flex items-center gap-2 font-semibold">${icon('globe')} Community listing</p>
-					<p class="mt-1 text-sm text-zinc-500"><b>Public</b> bots appear on the <a class="text-fnlb-300 underline" href="/community" target="_blank" rel="noopener">community page</a> (no login needed), so anyone can add them and use them in a party. <b>Private</b> bots are yours only. It only lists a public bot while it's <b>running, not banned and free</b>: once someone has it in their party (or it's in a match) it's hidden until it's free again. The page only shows the name and your note: nobody else gets your friends, DMs, skins or settings.</p>
+					<p class="mt-1 text-sm text-zinc-500"><b>Public</b> bots appear on the <a class="text-fnlb-300 underline" href="/public-lists" target="_blank" rel="noopener">community page</a> (no login needed), so anyone can add them and use them in a party. <b>Private</b> bots are yours only. It only lists a public bot while it's <b>running, not banned and free</b>: once someone has it in their party (or it's in a match) it's hidden until it's free again. The page only shows the name and your note: nobody else gets your friends, DMs, skins or settings.</p>
 				</div>
-				<a class="btn-secondary" href="/community" target="_blank" rel="noopener">${icon('external-link')} Open page</a>
+				<a class="btn-secondary" href="/public-lists" target="_blank" rel="noopener">${icon('external-link')} Open page</a>
 			</div>
 			${data?.fnlbError ? `<p class="mb-2 text-sm text-amber-200">${escapeHtml(data.fnlbError)}</p>` : ''}
 			${

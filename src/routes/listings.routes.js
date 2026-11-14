@@ -25,7 +25,8 @@ export function registerListingRoutes(ctx) {
 	const { app, runtime, requireAuth, requireActive } = ctx;
 	const guard = [requireAuth, requireActive];
 
-	app.get('/community', (_req, res) => res.sendFile(join(publicDir, 'community.html')));
+	app.get('/public-lists', (_req, res) => res.sendFile(join(publicDir, 'community.html')));
+	app.get('/community', (_req, res) => res.redirect(301, '/public-lists'));
 
 	app.get(
 		'/api/public/bots',
