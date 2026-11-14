@@ -106,6 +106,11 @@ export async function fetchFnlbBots(apiToken) {
 	return Array.isArray(bots) ? bots.map(annotateBotStatus) : [];
 }
 
+export async function fetchFnlbCategories(apiToken) {
+	const categories = await fnlbRequest(apiToken, '/categories/');
+	return Array.isArray(categories) ? categories.map(annotateCategory) : [];
+}
+
 export async function fetchFnlbDashboard(apiToken) {
 	const [bots, stats, categories, user] = await Promise.all([
 		fetchFnlbBots(apiToken),

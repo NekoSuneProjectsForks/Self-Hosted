@@ -221,10 +221,51 @@ function communityPanel() {
 				!data
 					? '<p class="text-sm text-zinc-500">Loading…</p>'
 					: bots.length
-						? `<div class="grid gap-2 lg:grid-cols-2">${bots.map(row).join('')}</div>`
+						? groupedListing(data, row)
 						: `<p class="text-sm text-zinc-500">No bots to list yet. ${localLocked() ? 'Add your FNLB API token in Advanced settings so your FNLB bots show here.' : 'Sign in a bot, or add your FNLB API token.'}</p>`
 			}
 		</section>`;
+}
+
+/**
+ * FNLB bots grouped by the categories the cluster boots, each with an
+ * "all Public / all Private" switch (new bots in it inherit the choice), then
+ * other FNLB bots, then local bots.
+ */
+function groupedListing(data, row) {
+	const bots = data.bots || [];
+	const categories = data.categories || [];
+	const shown = new Set();
+	const grid = (list) => `<div class="grid gap-2 lg:grid-cols-2">${list.map(row).join('')}</div>`;
+	const sections = categories.map((category) => {
+		const inCategory = bots.filter((bot) => bot.engine === 'fnlb' && bot.categoryId === category.id);
+		inCategory.forEach((bot) => shown.add(bot));
+		const allPublic = category.bots > 0 && category.publicBots === category.bots;
+		const allPrivate = category.publicBots === 0;
+		const segment = (makePublic, active, iconName, label) =>
+			`<button class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ${active ? (makePublic ? 'bg-fnlb-500/20 text-fnlb-200' : 'bg-white/10 text-zinc-100') : 'text-zinc-400 hover:text-zinc-200'}" data-action="listing-category" data-category="${escapeHtml(category.id)}" data-name="${escapeHtml(category.name)}" data-public="${makePublic}">${icon(iconName, 'h-3.5 w-3.5')} ${label}</button>`;
+		return `
+			<div class="rounded-lg border border-white/10 p-3">
+				<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+					<div class="min-w-0">
+						<p class="flex items-center gap-2 font-semibold">${icon('folder', 'h-4 w-4')} ${escapeHtml(category.name)}</p>
+						<p class="text-xs text-zinc-500">FNLB category · ${category.bots} bot${category.bots === 1 ? '' : 's'} · ${category.publicBots} public${!allPublic && !allPrivate ? ' (mixed)' : ''}${category.choice !== null ? ' · new bots join as ' + (category.choice ? 'public' : 'private') : ''}</p>
+					</div>
+					<div class="flex rounded-lg border border-white/10 p-0.5 text-xs" role="group" aria-label="Category visibility">
+						${segment(false, allPrivate, 'lock', 'All private')}
+						${segment(true, allPublic, 'globe', 'All public')}
+					</div>
+				</div>
+				${inCategory.length ? grid(inCategory) : '<p class="text-xs text-zinc-500">No bots in this category.</p>'}
+			</div>`;
+	});
+	const otherFnlb = bots.filter((bot) => bot.engine === 'fnlb' && !shown.has(bot));
+	const local = bots.filter((bot) => bot.engine === 'fnbr');
+	if (otherFnlb.length) {
+		sections.push(`<div class="rounded-lg border border-white/10 p-3"><p class="mb-2 font-semibold">${categories.length ? 'Other FNLB bots' : 'FNLB bots'}</p>${grid(otherFnlb)}</div>`);
+	}
+	if (local.length) sections.push(`<div class="rounded-lg border border-white/10 p-3"><p class="mb-2 font-semibold">Local bots</p>${grid(local)}</div>`);
+	return `<div class="grid gap-3">${sections.join('')}</div>`;
 }
 
 function lockedPanel() {

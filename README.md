@@ -429,6 +429,12 @@ to share. Each member decides per bot on **Bots → Community listing**:
   busy bots. Owners see on their Bots page why a public bot is hidden.
 - **Private** (default): only the owner uses it.
 
+**Legacy FNLB categories**: the panel groups FNLB bots by the categories your
+cluster boots (the Advanced categories filter, or every category with bots
+when the filter is empty). Each category has **All private / All public**:
+it switches every bot in the category, and bots added to the category later
+take the same choice. Single bots can still be switched on their own.
+
 The public page is read-only. It never shows owners, emails or account IDs,
 and it has no controls: friends, DMs, skins and settings stay with the owner.
 Ownership is checked when publishing (a local bot must be your main or extra

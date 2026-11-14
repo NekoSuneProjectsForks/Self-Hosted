@@ -295,6 +295,19 @@ document.addEventListener('click', async (event) => {
 			render();
 			return;
 		}
+		if (action === 'listing-category') {
+			const makePublic = button.dataset.public === 'true';
+			const result = await api('/api/listings/category', {
+				method: 'PUT',
+				body: { categoryId: button.dataset.category, isPublic: makePublic }
+			});
+			state.listings = result;
+			setToast(
+				`${button.dataset.name || 'Category'}: ${result.result?.bots ?? 0} bot(s) now ${makePublic ? 'public' : 'private'}. New bots in it will be ${makePublic ? 'public' : 'private'} too.`
+			);
+			render();
+			return;
+		}
 		if (action === 'listing-visibility') {
 			const makePublic = button.dataset.public === 'true';
 			state.listings = await api('/api/listings', {

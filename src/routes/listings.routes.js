@@ -1,10 +1,20 @@
 import { join } from 'node:path';
 import { asyncRoute } from '../http/helpers.js';
 import { publicDir } from '../lib/paths.js';
-import { availability, fnlbBotInfo, listMyListings, publicBots, setListing } from '../services/botListings.js';
-import { getPlainConfig } from '../services/configStore.js';
+import {
+	CATEGORY_ENGINE,
+	availability,
+	fnlbBotInfo,
+	inheritCategoryChoice,
+	listMyListings,
+	publicBots,
+	setCategoryListing,
+	setListing
+} from '../services/botListings.js';
+import { BotListing } from '../models/index.js';
+import { getPlainConfig, parseIdList } from '../services/configStore.js';
 import { listBotAccounts } from '../services/botAccounts.js';
-import { fetchFnlbBots } from '../services/fnlbApi.js';
+import { fetchFnlbBots, fetchFnlbCategories } from '../services/fnlbApi.js';
 import { localEngineAllowed } from '../services/serverSettings.js';
 
 /**
@@ -30,10 +40,30 @@ export function registerListingRoutes(ctx) {
 	/** The user's bots that can be listed, each with its current Public/Private choice. */
 	async function myBots(user) {
 		const userId = user.id;
+		const config = await getPlainConfig(userId);
+
+		// Legacy FNLB: bots and categories from the user's token. Bots new to a
+		// category that has a saved choice inherit it first.
+		let fnlbBots = [];
+		let fnlbCategories = [];
+		let fnlbError = null;
+		if (config.apiToken) {
+			try {
+				const [bots, categories] = await Promise.all([fetchFnlbBots(config.apiToken), fetchFnlbCategories(config.apiToken).catch(() => [])]);
+				fnlbBots = bots.map((bot) => ({ id: bot.id, name: bot.nickname || bot.id, categoryId: bot.parent || null }));
+				fnlbCategories = categories;
+			} catch (error) {
+				fnlbError = `Could not load your FNLB bots: ${error.message}`;
+			}
+		}
+		const categoryRows = await BotListing.findAll({ where: { userId, engine: CATEGORY_ENGINE } });
+		const categoryChoices = new Map(categoryRows.map((row) => [row.botKey, row.isPublic]));
+		await inheritCategoryChoice(userId, fnlbBots, categoryChoices);
+
 		const listings = await listMyListings(userId);
 		const saved = new Map(listings.map((row) => [`${row.engine}:${row.botKey}`, row]));
 		const rows = [];
-		const add = (engine, botKey, name, note) => {
+		const add = (engine, botKey, name, note, extra = {}) => {
 			if (!botKey) return;
 			const listing = saved.get(`${engine}:${botKey}`);
 			const live = runtime.publicBotStatus(userId, engine, botKey);
@@ -49,10 +79,10 @@ export function registerListingRoutes(ctx) {
 				note,
 				online: Boolean(live),
 				isPublic: Boolean(listing?.isPublic),
-				description: listing?.description || ''
+				description: listing?.description || '',
+				...extra
 			});
 		};
-		const config = await getPlainConfig(userId);
 		const fnlbAccounts = config.apiToken ? await fnlbBotInfo(userId) : new Map();
 		if (await localEngineAllowed(user)) {
 			add('fnbr', config.deviceAuth?.accountId, null, 'Main bot (local engine)');
@@ -60,18 +90,55 @@ export function registerListingRoutes(ctx) {
 				if (!account.tracker) add('fnbr', account.accountId, account.displayName || account.label, `Extra bot · ${account.label}`);
 			}
 		}
-		let fnlbError = null;
-		if (config.apiToken) {
-			try {
-				for (const bot of await fetchFnlbBots(config.apiToken)) add('fnlb', bot.id, bot.nickname || bot.id, 'FNLB bot');
-			} catch (error) {
-				fnlbError = `Could not load your FNLB bots: ${error.message}`;
-			}
+		const names = new Map(fnlbCategories.map((category) => [category.id, category.name || category.id]));
+		for (const bot of fnlbBots) {
+			add('fnlb', bot.id, bot.name, 'FNLB bot', { categoryId: bot.categoryId, categoryName: bot.categoryId ? names.get(bot.categoryId) || bot.categoryId : null });
 		}
-		return { bots: rows, fnlbError };
+
+		// Categories the cluster boots (the Advanced "categories" filter), or
+		// every category that has bots when no filter is set.
+		const booted = parseIdList(config.categories);
+		const categories = fnlbCategories
+			.filter((category) => (booted.length ? booted.includes(category.id) : fnlbBots.some((bot) => bot.categoryId === category.id)))
+			.map((category) => {
+				const inCategory = rows.filter((row) => row.engine === 'fnlb' && row.categoryId === category.id);
+				return {
+					id: category.id,
+					name: category.name || category.id,
+					booted: !booted.length || booted.includes(category.id),
+					bots: inCategory.length,
+					publicBots: inCategory.filter((row) => row.isPublic).length,
+					choice: categoryChoices.has(category.id) ? categoryChoices.get(category.id) : null
+				};
+			});
+		return { bots: rows, categories, fnlbError };
 	}
 
 	app.get('/api/listings', ...guard, asyncRoute(async (req, res) => res.json(await myBots(req.user))));
+
+	/** Legacy FNLB: make every bot in a category Public or Private (new bots inherit it). */
+	app.put(
+		'/api/listings/category',
+		...guard,
+		asyncRoute(async (req, res) => {
+			const categoryId = String(req.body?.categoryId || '').trim();
+			const config = await getPlainConfig(req.user.id);
+			if (!config.apiToken) {
+				const error = new Error('Save your FNLB API token first.');
+				error.status = 400;
+				throw error;
+			}
+			const [categories, bots] = await Promise.all([fetchFnlbCategories(config.apiToken), fetchFnlbBots(config.apiToken)]);
+			if (!categories.some((category) => category.id === categoryId)) {
+				const error = new Error('That category is not one of yours.');
+				error.status = 403;
+				throw error;
+			}
+			const inCategory = bots.filter((bot) => bot.parent === categoryId).map((bot) => ({ id: bot.id, name: bot.nickname || bot.id }));
+			const result = await setCategoryListing(req.user.id, categoryId, req.body?.isPublic === true, inCategory);
+			return res.json({ result, ...(await myBots(req.user)) });
+		})
+	);
 
 	app.put(
 		'/api/listings',

@@ -76,6 +76,45 @@ export async function setListing(userId, payload, { verify = ownsBot } = {}) {
 	return serializeMine(row);
 }
 
+/**
+ * Category-wide choice for Legacy FNLB: every bot in the category becomes
+ * Public or Private, and bots added to the category later inherit it.
+ * Stored as engine "fnlb-cat" (never shown publicly itself).
+ */
+export const CATEGORY_ENGINE = 'fnlb-cat';
+
+export async function setCategoryListing(userId, categoryId, isPublic, botsInCategory) {
+	const key = clean(categoryId, 64);
+	if (!key) throw httpError(400, 'Pick a category.');
+	const [row] = await BotListing.findOrCreate({ where: { userId, engine: CATEGORY_ENGINE, botKey: key }, defaults: { isPublic: Boolean(isPublic) } });
+	await row.update({ isPublic: Boolean(isPublic) });
+	for (const bot of botsInCategory) {
+		const [botRow] = await BotListing.findOrCreate({
+			where: { userId, engine: 'fnlb', botKey: bot.id },
+			defaults: { isPublic: Boolean(isPublic), displayName: bot.name || null }
+		});
+		await botRow.update({ isPublic: Boolean(isPublic), ...(bot.name && !botRow.displayName ? { displayName: bot.name } : {}) });
+	}
+	clearPublicCache();
+	return { categoryId: key, isPublic: Boolean(isPublic), bots: botsInCategory.length };
+}
+
+/** New bots in a category with a saved choice inherit it (creates their rows). */
+export async function inheritCategoryChoice(userId, bots, categoryChoices) {
+	let changed = false;
+	for (const bot of bots) {
+		const choice = categoryChoices.get(bot.categoryId);
+		if (choice === undefined) continue;
+		const [, created] = await BotListing.findOrCreate({
+			where: { userId, engine: 'fnlb', botKey: bot.id },
+			defaults: { isPublic: choice, displayName: bot.name || null }
+		});
+		if (created) changed = true;
+	}
+	if (changed) clearPublicCache();
+	return changed;
+}
+
 export async function removeListingsForUser(userId) {
 	await BotListing.destroy({ where: { userId } });
 	clearPublicCache();
@@ -137,7 +176,7 @@ export function availability(live, account = null, { now = Date.now() } = {}) {
  */
 export async function publicBots(statusOf, { now = Date.now(), fnlbInfo = fnlbBotInfo } = {}) {
 	if (publicCache.rows && now - publicCache.at < CACHE_MS) return publicCache.rows;
-	const rows = await BotListing.findAll({ where: { isPublic: true } });
+	const rows = (await BotListing.findAll({ where: { isPublic: true } })).filter((row) => ENGINES.includes(row.engine));
 	const owners = await User.findAll({ where: { id: [...new Set(rows.map((row) => row.userId))] }, attributes: ['id', 'status'] });
 	const active = new Set(owners.filter((user) => user.status !== 'suspended').map((user) => user.id));
 	const bots = [];
