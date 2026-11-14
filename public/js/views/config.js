@@ -22,7 +22,12 @@ export function showEngineFields(form, engine) {
 	}
 }
 
-export function renderConfig() {
+/** Server / engine settings form. Shown in the main bot's Advanced tab. */
+export function renderConfigForm() {
+	return renderConfig({ withAccounts: false });
+}
+
+export function renderConfig({ withAccounts = true } = {}) {
 	const config = state.config || {};
 	const engine = config.runtimeMode === 'fnlb' ? 'fnlb' : 'fnbr';
 	const fnbr = engineOnly('fnbr', engine);
@@ -43,7 +48,7 @@ export function renderConfig() {
 					<input class="input" name="authorizationCode" type="password" ${NO_AUTOFILL} placeholder="${config.authorizationCodeConfigured ? 'Saved authorization code pending use' : config.deviceAuthConfigured ? 'Signed in. Paste a new code only to switch account' : 'Paste the code, or the whole page Epic shows'}" />
 						<span class="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
 							${epicCodeButton(config.deviceAuthConfigured ? 'Sign in with a different account' : 'Sign in with Epic / get code', 'main')}
-							Use a <strong class="text-red-300">dummy account</strong>, never your main. Paste the <code>authorizationCode</code> or the whole page. It works once and expires in a few minutes.
+							<span>Use a <strong class="text-red-300">dummy account</strong>, never your main. Paste the <code>authorizationCode</code> or the whole page. It works once and expires in a few minutes.</span>
 						</span>
 					</label>
 					<label ${fnbr}>
@@ -149,7 +154,7 @@ export function renderConfig() {
 				<button class="btn-primary w-full" type="submit">${icon('save')} Save Config</button>
 			</aside>
 		</form>
-		${engine === 'fnbr' ? renderBotAccounts() : ''}
+		${withAccounts && engine === 'fnbr' ? renderBotAccounts() : ''}
 	`;
 }
 

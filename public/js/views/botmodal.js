@@ -3,6 +3,7 @@ import { escapeHtml, icon, statusBadge } from '../core/ui.js';
 import { runtimeOnline, usingLocalFnbr } from '../core/selectors.js';
 import { epicCodeButton, platformLabel, platformOptions } from '../core/platforms.js';
 import { effectivePlatform, inMainLobby, mainPlatform } from './botlobby.js';
+import { renderConfigForm } from './config.js';
 
 const TABS = [
 	['overview', 'gauge', 'Overview'],
@@ -16,6 +17,10 @@ function target() {
 	if (!key) return null;
 	if (key === 'main') {
 		const online = runtimeOnline() && usingLocalFnbr();
+		if (!usingLocalFnbr()) {
+			// FNLB mode has no single main bot; only the server settings apply.
+			return { key, isMain: true, fnlb: true, name: 'Server settings', status: state.runtime?.status || 'offline', online: false, botId: null, platform: mainPlatform(), bot: null };
+		}
 		const bot = online ? state.bots?.[0] || null : null;
 		return {
 			key,
@@ -148,7 +153,7 @@ function accountTab(t) {
 						<input class="input" name="defaultStatus" maxlength="120" value="${escapeHtml(state.config?.defaultStatus || '')}" placeholder="Battle Royale Lobby" />
 					</label>
 					<div><button class="btn-primary" type="submit">${icon('save')} Save</button></div>
-					<p class="text-xs text-zinc-500">The status changes straight away; a new platform applies on the next restart. Engine, shards and other server options are under Server Config.</p>
+					<p class="text-xs text-zinc-500">The status changes straight away; a new platform applies on the next restart. Engine, restart schedule and other server options are in the Advanced tab.</p>
 				</form>
 			</div>`;
 	}
@@ -175,26 +180,33 @@ function accountTab(t) {
 		</div>`;
 }
 
+function advancedTab() {
+	return `
+		<p class="mb-3 text-sm text-zinc-500">Server-wide settings: bot engine (local fnbr or legacy FNLB), manual device auth, restart schedule, Epic session options and the FNLB token. Most changes apply on the next restart.</p>
+		${renderConfigForm()}`;
+}
+
 export function renderBotModal() {
 	const t = target();
 	if (!t) return '';
-	const tab = state.botModal.tab || 'overview';
-	const body = tab === 'look' ? lookTab(t) : tab === 'account' ? accountTab(t) : overviewTab(t);
+	const tabs = t.fnlb ? [['advanced', 'sliders-horizontal', 'Advanced']] : t.isMain ? [...TABS, ['advanced', 'sliders-horizontal', 'Advanced']] : TABS;
+	const tab = tabs.some(([key]) => key === state.botModal.tab) ? state.botModal.tab : tabs[0][0];
+	const body = tab === 'advanced' ? advancedTab() : tab === 'look' ? lookTab(t) : tab === 'account' ? accountTab(t) : overviewTab(t);
 	return `
 		<div class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="bot-modal-title" data-action="bot-modal-backdrop">
-			<div class="modal-panel w-full max-w-2xl" data-modal-panel>
+			<div class="modal-panel w-full ${tab === 'advanced' ? 'max-w-5xl' : 'max-w-2xl'}" data-modal-panel>
 				<div class="flex items-start justify-between gap-3 border-b border-white/10 p-4">
 					<div class="flex min-w-0 items-center gap-3">
 						<div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-fnlb-500/15 text-fnlb-300">${icon('bot', 'h-6 w-6')}</div>
 						<div class="min-w-0">
 							<p id="bot-modal-title" class="truncate text-lg font-bold">${escapeHtml(t.name)}</p>
-							<p class="text-xs text-zinc-500">${t.isMain ? 'Main bot' : 'Extra bot'} · ${escapeHtml(platformLabel(t.platform))}</p>
+							<p class="text-xs text-zinc-500">${t.fnlb ? 'Legacy FNLB engine' : `${t.isMain ? 'Main bot' : 'Extra bot'} · ${escapeHtml(platformLabel(t.platform))}`}</p>
 						</div>
 					</div>
 					<button class="btn-secondary px-2" data-action="bot-modal-close" title="Close">${icon('x')}</button>
 				</div>
 				<div class="flex gap-1 border-b border-white/10 px-4">
-					${TABS.map(
+					${tabs.map(
 						([key, iconName, label]) => `
 						<button class="tab ${tab === key ? 'active' : ''}" data-action="bot-modal-tab" data-tab="${key}">${icon(iconName, 'h-4 w-4')} ${label}</button>`
 					).join('')}

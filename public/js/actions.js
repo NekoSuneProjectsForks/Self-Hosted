@@ -74,7 +74,6 @@ document.addEventListener('click', async (event) => {
 		state.view = view;
 		try {
 			if (view === 'admin') await loadAdmin();
-			if (view === 'config') await loadBotAccounts(false).catch(() => {});
 			if ((view === 'status' || view === 'categories' || view === 'items') && !state.dashboard) await loadDashboard(false);
 			if (view === 'items' && usingLocalFnbr()) {
 				state.botDefaults = await api('/api/bot-defaults').catch(() => null);

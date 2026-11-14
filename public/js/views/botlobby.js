@@ -177,6 +177,7 @@ export function renderBotLobby() {
 						<p class="mt-1 text-sm text-zinc-500">Click a bot to open its settings: battle pass level, look, platform, sign-in and more. Extra bots online: ${online}/${accounts.length}.</p>
 					</div>
 					<div class="flex flex-wrap gap-2">
+						<button class="btn-secondary" data-action="bot-settings" data-bot-key="main" data-tab="advanced">${icon('sliders-horizontal')} Advanced settings</button>
 						<button class="btn-primary" data-action="botlobby-start-all" ${!accounts.length ? 'disabled' : ''}>${icon('power')} Start all${mainOnline ? ' + join' : ''}</button>
 						<button class="btn-secondary" data-action="botlobby-join-main" ${!online || !mainOnline ? 'disabled' : ''}>${icon('users')} All join main</button>
 						<button class="btn-secondary" data-action="botlobby-leave" ${!online ? 'disabled' : ''}>${icon('log-out')} All leave</button>

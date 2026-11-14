@@ -182,7 +182,12 @@ The sidebar is grouped:
 - **Dashboard**
 - **Play**: Lobby, Friends, Messages, Matches
 - **Bots**: Bots (every bot, with a settings pop-up), Locker (cosmetics, loadouts, join defaults)
-- **System**: Console (live runtime output with filters), Server Config, Categories (FNLB only), Account, Admin
+- **System**: Console (live runtime output with filters), Categories (FNLB only), Account, Admin
+
+There's no separate config page. Server-wide settings (engine, manual device
+auth, restart schedule, Epic session options, FNLB token) are in the main bot's
+settings pop-up under **Advanced**, also reachable from **Bots → Advanced
+settings**.
 
 The top bar shows the engine and status, the **control picker** (which bot the
 live pages act on), and Start/Stop.
@@ -192,6 +197,7 @@ On **Bots**, click any bot (main or extra) to open its settings pop-up:
 - **Overview**: status, platform, battle pass level, party, start/stop, control in Lobby, join the main lobby, leave the party
 - **Look & level**: battle pass level (with 1/50/100/200 presets), battle pass owned, banner, crowns, applied to that bot or saved as join default; **copy a player's look** from the bot's party
 - **Account**: sign in (with the dummy-account warning), platform, presence status, plus label, auto-start and remove for extra bots
+- **Advanced** (main bot): engine, manual device auth, restart schedule, Epic session options, FNLB token
 
 On **Lobby**, every other player has **Copy look to bot** (outfit, back bling,
 pickaxe, kicks, battle pass level and banner; styles can't be copied), each

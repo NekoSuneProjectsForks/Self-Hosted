@@ -372,7 +372,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			try {
 				build = normalizeBuildId(await client.fetchPartyBuildId());
 			} catch (error) {
-				this.log(`[Local fnbr] Could not look up the Fortnite build from Epic (${error.message}). It will be taken from a friend's party when one is seen, or set it under Server Config.`, 3);
+				this.log(`[Local fnbr] Could not look up the Fortnite build from Epic (${error.message}). It will be taken from a friend's party when one is seen, or set it under Bots → Lobby behaviour → Fortnite build.`, 3);
 			}
 		}
 		this.health.gameBuild = build || 'unknown';
@@ -424,7 +424,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		}));
 		const playlistId = serializeParty(party)?.playlistId || null;
 		const problems = [];
-		if (!build) problems.push('The bot does not know the Fortnite build (netCL); it may look like a different game version. Set it under Server Config.');
+		if (!build) problems.push('The bot does not know the Fortnite build (netCL); it may look like a different game version. Set it under Bots → Lobby behaviour → Fortnite build.');
 		if (build && partyBuild && partyBuild !== build) problems.push(`The party was created with build "${partyBuild}" but the bot now uses "${build}". Make the bot leave and rejoin.`);
 		if (/solo/i.test(playlistId || '') && members.length > 1) problems.push('Solo playlist with more than one member.');
 		if (members.filter((m) => m.isBot).length > 1) problems.push('More than one of your bots is in the party.');

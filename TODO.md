@@ -213,3 +213,4 @@ modules plus a 167-line wiring file.
 - [x] Likely real cause of "no match found" with a single bot on Duos: the bot's party and presence used build ID `1:3:` (no netCL) because fnbr creates the party during login() before looking the build up (fnbr >= 4.2.70, see Fortnite-LobbyBot/fnbr.js#11). Now fetched after login, the party is recreated while alone, a friend's presence is the fallback, and there's a manual override
 - [x] Matchmaking check (`GET /api/bots/:botId/matchmaking-check`) + Lobby panel
 - [!] Unconfirmed until tested in a real queue. If it still fails, the raw check output is the next thing to look at
+- [x] Server Config page removed; its settings moved to the main bot's Advanced tab (plus Bots → Advanced settings, which also works in FNLB mode). Old `config` links open Bots

@@ -5,7 +5,6 @@ import { renderStatus } from './status.js';
 import { renderCategories } from './categories.js';
 import { renderItems } from './items.js';
 import { renderProfile } from './profile.js';
-import { renderConfig } from './config.js';
 import { renderAdmin } from './admin.js';
 import { renderLobby } from './lobby.js';
 import { renderFriends } from './friends.js';
@@ -17,7 +16,7 @@ import { renderBotModal } from './botmodal.js';
 import { renderEpicCodePrompt } from '../core/platforms.js';
 
 /** Old view names from bookmarks / earlier versions. */
-const VIEW_ALIASES = { botlobby: 'bots', profile: 'account' };
+const VIEW_ALIASES = { botlobby: 'bots', profile: 'account', config: 'bots' };
 
 export function currentView() {
 	return VIEW_ALIASES[state.view] || state.view;
@@ -52,7 +51,6 @@ function navGroups() {
 			'System',
 			[
 				['console', 'terminal', 'Console'],
-				['config', 'settings-2', 'Server Config'],
 				...(local ? [] : [['categories', 'folders', 'Categories']]),
 				['account', 'user', 'Account'],
 				...(state.user?.role === 'admin' ? [['admin', 'shield', 'Admin']] : [])
@@ -161,7 +159,6 @@ export function viewTitle() {
 		bots: 'Bots',
 		items: 'Locker',
 		console: 'Console',
-		config: 'Server Config',
 		categories: 'Categories',
 		account: 'Account',
 		admin: 'Admin'
@@ -177,7 +174,6 @@ export function renderView() {
 	if (view === 'messages') return renderMessages();
 	if (view === 'matches') return renderMatches();
 	if (view === 'console') return renderConsole();
-	if (view === 'config') return renderConfig();
 	if (view === 'categories') return renderCategories();
 	if (view === 'items') return renderItems();
 	if (view === 'admin') return renderAdmin();
