@@ -308,15 +308,16 @@ record. It also mirrors the leader's `SubGame_u`: fnbr hard-codes `1`, while a
 console in Battle Royale sends `2`, and the check flags any mismatch as
 "Sub-game differs".
 
-**Follow the leader's queue** (experimental, off by default). A check on
-3b0a5d7 showed the leader's console stopping at barrier 268 with
-`bHasOwnerStartedMM` false: it waits for every member to report that it's
-following the queue. With this on, the bot echoes the leader's queue
-progress (group ID, barrier bits, state, result) into its **own**
-`MatchmakingData1` slot. It never copies the leader's `worldSessionId`,
-`matchmakingId`, island selection or `MatchmakingData2`. Those IDs, copied
-along with everything else, are what crashed the PS5. The check shows the
-bot's barrier next to the leader's and flags a stalled queue.
+**Why the local engine can't queue with you (Nov 2026).** The leader's console
+waits at barrier 268 until every member reports, through `MatchmakingData1`,
+that it's following the queue. Echoing that progress from the bot crashed the
+leader's PS5 twice (CE-108255-1): once with the full record copied (7e161c0
+reverted it) and once with only the counters copied (bfa40ac, disabled in
+a4d3718). No public library implements this. rebootpy (moved to Epic Parties,
+experimental, Sept 2026) and fnbr only publish an idle slot. FNLB fixed bot-lobby
+matchmaking in its closed runtime (status.fnlb.net, May 2026, bots 2.0.149+).
+For bot lobbies, use the **Legacy FNLB engine**. With the local engine, use
+**Step out when you ready up**.
 
 **Leave when the queue starts** (off by default) is a fallback: if matchmaking
 still fails with the bot in the party, the bot steps out as soon as the leader

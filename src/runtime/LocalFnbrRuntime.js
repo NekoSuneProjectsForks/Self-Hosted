@@ -546,7 +546,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		if (lastRow && lastRow.groupId && lastRow.leaderReady === 'Ready' && lastRow.ownerStarted !== true && !lastRow.failReason) {
 			problems.push(this.followLeaderQueue()
 				? `The leader's queue stopped at barrier ${lastRow.barrierBits} with "Follow the leader's queue" on (bot at ${lastRow.botBarrierBits ?? 'none'}).`
-				: `The leader's queue stopped at barrier ${lastRow.barrierBits} without starting. Their console waits for every member to follow the queue; try "Follow the leader's queue (experimental)" or "Step out when you ready up".`);
+				: `The leader's queue stopped at barrier ${lastRow.barrierBits} without starting: the local engine can't take part in Fortnite's party queue. Use "Step out when you ready up", or the Legacy FNLB engine for bot lobbies.`);
 		}
 
 		// Every non-cosmetic member field that differs between the bot and the leader.

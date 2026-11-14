@@ -227,5 +227,5 @@ modules plus a 167-line wiring file.
 - [!] Need a check after pulling this, with step-out off, to see whether the owner start now goes through
 - [x] Step-out fallback now triggers on leader ready too, and only rejoins after the host was actually in a match
 - [x] Check on 3b0a5d7: still stalls at barrier 268, owner never starts (bot ready, SubGame fixed). Added "Follow the leader's queue (experimental)": the bot echoes the group ID/barriers/state into its own slot, without session/matchmaking IDs. Fixed dropped mirror updates mid-patch. Check flags a stalled queue
-- [!] Need a check with Follow on: does barrier pass 268 / owner start, and does the PS5 stay up when a session is found
+- [x] Follow on crashed the PS5 again. Disabled permanently (a4d3718). Deep search: no open-source library joins the 42.x queue as a non-leader (rebootpy, fnbr.js only idle slots); FNLB's closed runtime does (2.0.149+). Local engine = step out; bot lobbies = Legacy FNLB engine
 - [!] "Bot doesn't see me join" when the bot leads (e.g. it stayed behind after the crash): likely the 42.x bot-as-captain lobby issue (Fortnite-LobbyBot/fnbr.js#11). Workaround: the player leads and invites the bot
