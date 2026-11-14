@@ -101,7 +101,7 @@ function normalizePlatform(value, fallback = DEFAULT_CONFIG.platform) {
 	return SUPPORTED_PLATFORMS.has(platform) ? platform : fallback;
 }
 
-function normalizeDeviceAuth(value) {
+export function normalizeDeviceAuth(value) {
 	if (!value) return null;
 	const deviceAuth = typeof value === 'string' ? JSON.parse(value) : value;
 	const normalized = {

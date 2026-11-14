@@ -141,7 +141,7 @@ export function registerLegacyRoutes(ctx) {
 		asyncRoute(async (req, res) => {
 			const config = await getPlainConfig(req.user.id);
 			if (!String(req.body.command || '').trim()) throw httpError(400, 'Command is required.');
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
 			const result = await adapter.runCommand(
 				req.body.command,
 				String(req.body.args || '').trim(),
@@ -168,7 +168,7 @@ export function registerLegacyRoutes(ctx) {
 				throw httpError(400, 'This action needs a target user or value.');
 			}
 
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
 			const result = await adapter.runCommand(command, args, req.params.botId, req.body.locale || 'en');
 			return res.json(result);
 		})
@@ -180,7 +180,7 @@ export function registerLegacyRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			if (!String(req.body.content || '').trim()) throw httpError(400, 'Message content is required.');
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
 			const result = await adapter.sendPartyMessage(
 				req.body.content,
 				req.params.botId,
@@ -197,7 +197,7 @@ export function registerLegacyRoutes(ctx) {
 		asyncRoute(async (req, res) => {
 			const prefix = String(req.query.prefix || '').trim();
 			if (!prefix) throw httpError(400, 'Search prefix is required.');
-			const adapter = runtime.requireActive(req.user.id);
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
 			const users = await adapter.searchUsers(prefix, req.query.platform || 'epic', req.params.botId);
 			return res.json({ users });
 		})

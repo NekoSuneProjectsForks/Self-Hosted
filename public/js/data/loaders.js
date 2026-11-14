@@ -1,7 +1,7 @@
 import { state } from '../core/state.js';
 import { api } from '../core/api.js';
 import { render } from '../core/render.js';
-import { dashboardAvailable } from '../core/selectors.js';
+import { controlBotId, controlOnline, dashboardAvailable } from '../core/selectors.js';
 
 export async function loadSession() {
 	const data = await api('/api/session');
@@ -60,13 +60,27 @@ export async function loadAdmin() {
 }
 
 function activeBotId() {
-	return state.bots?.[0]?.id || state.selectedBotId || null;
+	return controlBotId();
+}
+
+/** Extra bot accounts (Bot Lobby) with their live status. */
+export async function loadBotAccounts(shouldRender = true) {
+	if (!state.user) return;
+	const data = await api('/api/bot-accounts');
+	state.botAccounts = data.accounts || [];
+	state.maxBotAccounts = data.maxAccounts || 15;
+	state.mainBotId = data.mainBotId || null;
+	// Fall back to the main bot if the controlled bot was removed.
+	if (state.controlBotId && !state.botAccounts.some((a) => a.accountId === state.controlBotId)) {
+		state.controlBotId = null;
+	}
+	if (shouldRender) render();
 }
 
 /** Friends, pending requests and the block list for the running bot. */
 export async function loadFriends(shouldRender = true) {
 	const botId = activeBotId();
-	if (!botId || state.runtime?.status !== 'online') return;
+	if (!botId || !controlOnline()) return;
 	const data = await api(`/api/bots/${encodeURIComponent(botId)}/friends`);
 	state.friends = {
 		onlineFriends: data.onlineFriends || [],
@@ -79,7 +93,7 @@ export async function loadFriends(shouldRender = true) {
 
 export async function loadParty(shouldRender = true) {
 	const botId = activeBotId();
-	if (!botId || state.runtime?.status !== 'online') return;
+	if (!botId || !controlOnline()) return;
 	const data = await api(`/api/bots/${encodeURIComponent(botId)}/party`);
 	state.party = data.party || null;
 	if (shouldRender) render();

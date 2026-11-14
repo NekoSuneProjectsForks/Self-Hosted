@@ -1,12 +1,13 @@
 import { state } from '../core/state.js';
+import { controlBot, controlBotId, controlCan, controlCapabilities, controlOnline } from '../core/selectors.js';
 import { escapeHtml, formatDate, icon, statusBadge, valueOrDash } from '../core/ui.js';
 
 function can(capability) {
-	return state.runtime?.capabilities?.capabilities?.[capability] === true;
+	return controlCan(capability);
 }
 
 function botId() {
-	return state.bots?.[0]?.id || state.selectedBotId || '';
+	return controlBotId() || '';
 }
 
 /**
@@ -146,7 +147,7 @@ function detailPanel() {
 }
 
 export function renderFriends() {
-	if (state.runtime?.status !== 'online') {
+	if (!controlOnline()) {
 		return `
 			<div class="shell-panel rounded-lg p-6 text-center">
 				<p class="font-semibold">The bot is offline</p>
@@ -155,7 +156,7 @@ export function renderFriends() {
 		`;
 	}
 	if (!can('friends')) {
-		return `<div class="shell-panel rounded-lg p-6 text-center text-sm text-zinc-500">The ${escapeHtml(state.runtime?.capabilities?.engine || 'active')} engine does not expose friend management.</div>`;
+		return `<div class="shell-panel rounded-lg p-6 text-center text-sm text-zinc-500">The ${escapeHtml(controlCapabilities()?.engine || 'active')} engine does not expose friend management.</div>`;
 	}
 
 	const online = state.friends?.onlineFriends || [];

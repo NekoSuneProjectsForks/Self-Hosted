@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 import { escapeHtml, icon, statusBadge, valueOrDash } from '../core/ui.js';
-import { usingLocalFnbr } from '../core/selectors.js';
+import { usingLocalFnbr, controlBot, controlBotId, controlCan, controlCapabilities, controlOnline } from '../core/selectors.js';
 
 const MATCH_STATE_LABELS = {
 	lobby: 'IN LOBBY',
@@ -19,15 +19,15 @@ const PRIVACY_OPTIONS = [
 
 /** Only render a control the active engine actually supports. */
 function can(capability) {
-	return state.runtime?.capabilities?.capabilities?.[capability] === true;
+	return controlCan(capability);
 }
 
 function activeBot() {
-	return state.bots?.[0] || null;
+	return controlBot();
 }
 
 export function currentMatchState() {
-	if (state.runtime?.status !== 'online') return 'offline';
+	if (!controlOnline()) return 'offline';
 	return activeBot()?.matchState || 'lobby';
 }
 
@@ -77,7 +77,7 @@ function memberCard(member, leaderId) {
 }
 
 export function renderLobby() {
-	if (state.runtime?.status !== 'online') {
+	if (!controlOnline()) {
 		return `
 			<div class="shell-panel rounded-lg p-6 text-center">
 				<p class="font-semibold">The bot is offline</p>

@@ -1,8 +1,9 @@
 import { state } from '../core/state.js';
+import { controlBot, controlBotId, controlCan, controlCapabilities, controlOnline } from '../core/selectors.js';
 import { escapeHtml, formatDate, icon } from '../core/ui.js';
 
 function can(capability) {
-	return state.runtime?.capabilities?.capabilities?.[capability] === true;
+	return controlCan(capability);
 }
 
 /** Everyone the bot could plausibly hold a DM thread with, newest activity first. */
@@ -100,7 +101,7 @@ function thread() {
 }
 
 export function renderMessages() {
-	if (state.runtime?.status !== 'online') {
+	if (!controlOnline()) {
 		return `
 			<div class="shell-panel rounded-lg p-6 text-center">
 				<p class="font-semibold">The bot is offline</p>
@@ -112,7 +113,7 @@ export function renderMessages() {
 		return `
 			<div class="shell-panel rounded-lg p-6 text-center">
 				<p class="font-semibold">Not supported by this engine</p>
-				<p class="mt-1 text-sm text-zinc-500">The ${escapeHtml(state.runtime?.capabilities?.engine || 'active')} engine has no verified direct-message API, so this page is disabled rather than showing a control that would not work.</p>
+				<p class="mt-1 text-sm text-zinc-500">The ${escapeHtml(controlCapabilities()?.engine || 'active')} engine has no verified direct-message API, so this page is disabled rather than showing a control that would not work.</p>
 			</div>
 		`;
 	}

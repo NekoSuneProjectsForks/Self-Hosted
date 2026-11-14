@@ -14,6 +14,7 @@ import { createSessionMiddleware } from './http/session.js';
 import { asyncRoute, httpError } from './http/helpers.js';
 import { registerAdminRoutes } from './routes/admin.routes.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
+import { registerBotAccountRoutes } from './routes/botAccounts.routes.js';
 import { registerBotRoutes } from './routes/bots.routes.js';
 import { registerConfigRoutes } from './routes/config.routes.js';
 import { registerLegacyRoutes } from './routes/legacy.routes.js';
@@ -124,6 +125,7 @@ export async function createServer() {
 	registerConfigRoutes(ctx);
 	registerQuickCommandRoutes(ctx);
 	registerBotRoutes(ctx);
+	registerBotAccountRoutes(ctx);
 	registerLegacyRoutes(ctx);
 	registerUploadRoutes(ctx);
 	registerAdminRoutes(ctx);

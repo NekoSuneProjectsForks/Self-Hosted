@@ -5,7 +5,7 @@ import { PresenceProbe } from './presenceProbe.js';
 const require = createRequire(import.meta.url);
 const { Client, Enums } = require('@fnlb-project/fnbr');
 
-// Verified against the installed fnbr 4.2.0 typings:
+// Verified against the installed @fnlb-project/fnbr 4.2.75 typings:
 //   ClientPartyMember: setOutfit/setBackpack/setPickaxe/setShoes/setEmote/clearEmote,
 //                      setReadiness/setSittingOut
 //   ClientParty:       setPrivacy/setPlaylist/setSquadFill/kick/promote/invite/
@@ -177,6 +177,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		this.onSnapshot = options.onSnapshot;
 		this.onFriendMessage = options.onFriendMessage;
 		this.onMatchState = options.onMatchState;
+		// Account IDs of the user's own other bots (main + extra accounts). Their
+		// friend requests and party invites are always accepted, so bots can
+		// gather in one lobby even when auto-accept is switched off.
+		this.trustedIds = options.trustedIds || (() => []);
 		this.health = {
 			epicAuth: 'disconnected',
 			xmpp: 'disconnected',
@@ -204,9 +208,19 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				matchTracking: true,
 				searchUsers: true,
 				promoteMember: true,
-				multiBot: false
+				multiBot: true,
+				dmCommands: true
 			}
 		};
+	}
+
+	isTrusted(accountId) {
+		if (!accountId) return false;
+		try {
+			return this.trustedIds().includes(accountId);
+		} catch {
+			return false;
+		}
 	}
 
 	// ---------------------------------------------------------------- start
@@ -323,6 +337,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				content: String(message.content ?? ''),
 				sentAt: new Date().toISOString()
 			});
+			this.handleDmCommand(message).catch((error) => this.log(`DM command failed: ${error.message}`, 4));
 		});
 
 		client.on('party:member:message', (message) => {
@@ -341,7 +356,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		// outgoing request can never be mistaken for an incoming one.
 		client.on('friend:request', async (pendingFriend) => {
 			this.emitFriends();
-			if (!this.autoAcceptFriendRequests()) {
+			if (!this.autoAcceptFriendRequests() && !this.isTrusted(pendingFriend.id)) {
 				this.log(`Friend request from ${pendingFriend.displayName || pendingFriend.id} is pending.`, 2);
 				return;
 			}
@@ -356,7 +371,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		});
 
 		client.on('party:invite', async (invitation) => {
-			if (!this.autoAcceptInvites()) {
+			if (!this.autoAcceptInvites() && !this.isTrusted(invitation.sender?.id)) {
 				this.log(`Party invite from ${invitation.sender?.displayName || invitation.sender?.id} is pending.`, 2);
 				this.emit('party:invite', {
 					botId: this.botId(),
@@ -755,9 +770,34 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		return { content: 'Party invite sent.', format: 1, source: 'fnbr' };
 	}
 
+	/**
+	 * Accepts a party ID or a friend (display name / account ID). For a friend
+	 * the bot joins the party from their presence; when that party is not
+	 * visible (private) it sends a join request the friend accepts in-game.
+	 */
 	async joinParty(target) {
 		const client = this.requireClient();
-		await client.joinParty(normalizeTarget(target, 'a party ID'));
+		const value = normalizeTarget(target, 'a party ID or friend');
+		const friend = client.friend.resolve(value);
+		if (friend) {
+			const name = friend.displayName || 'that friend';
+			const partyId = safeValue(() => friend.party?.id, null);
+			if (partyId && partyId === client.party?.id) {
+				return { content: `Already in ${name}'s party.`, format: 1, source: 'fnbr' };
+			}
+			if (partyId) {
+				await client.joinParty(partyId);
+				this.emitParty();
+				return { content: `Joined ${name}'s party.`, format: 1, source: 'fnbr' };
+			}
+			await friend.sendJoinRequest();
+			return {
+				content: `${name}'s party is not joinable directly, so a join request was sent. Accept it in Fortnite.`,
+				format: 2,
+				source: 'fnbr'
+			};
+		}
+		await client.joinParty(value);
 		this.emitParty();
 		return { content: 'Joined party.', format: 1, source: 'fnbr' };
 	}
@@ -918,6 +958,90 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		this.emit('cosmetics:updated', { botId: this.botId(), cosmetics });
 		this.queueSnapshot();
 		return { content: 'Emote cleared.', format: 1, source: 'fnbr', cosmetics };
+	}
+
+	// ---------------------------------------------------------- DM commands
+
+	dmCommandsEnabled() {
+		return this.startConfig.localCategory?.config?.dmCommands !== false;
+	}
+
+	async replyTo(friendId, content) {
+		const client = this.client;
+		if (!client?.isReady) return;
+		await client.friend.sendMessage(friendId, content);
+		this.onFriendMessage?.(this.userId, {
+			botId: this.botId(),
+			friendId,
+			friendName: client.friend.resolve(friendId)?.displayName || null,
+			direction: 'outgoing',
+			content,
+			sentAt: new Date().toISOString()
+		});
+	}
+
+	/**
+	 * Classic lobby-bot DM commands: a friend messages a cosmetic ID or a
+	 * !command and the bot applies it to itself. Messages from the user's own
+	 * other bots are ignored so two bots can never loop on each other.
+	 */
+	async handleDmCommand(message) {
+		if (!this.dmCommandsEnabled()) return;
+		const friendId = message.author?.id;
+		if (!friendId || this.isTrusted(friendId)) return;
+		const text = String(message.content ?? '').trim();
+		if (!text) return;
+
+		const [rawCommand, ...rest] = text.split(/\s+/);
+		const command = rawCommand.toLowerCase();
+		const args = rest.join(' ');
+		const reply = (content) => this.replyTo(friendId, content);
+		const attempt = async (action, ok) => {
+			try {
+				const result = await action();
+				await reply(typeof ok === 'function' ? ok(result) : ok);
+			} catch (error) {
+				await reply(`Could not do that: ${error.message}`);
+			}
+		};
+
+		const upper = rawCommand.toUpperCase();
+		for (const [prefix, slot] of [
+			['CID_', 'outfit'],
+			['BID_', 'backpack'],
+			['PICKAXE_ID_', 'pickaxe'],
+			['EID_', 'emote']
+		]) {
+			if (upper.startsWith(prefix)) {
+				return attempt(() => this.setCosmetic(slot, rawCommand), `${slot} set to ${rawCommand}.`);
+			}
+		}
+
+		switch (command) {
+			case '!help':
+			case '!commands':
+				return reply(
+					'Commands: CID_ / BID_ / Pickaxe_ID_ / EID_ <id>, !ready, !unready, !sitout, !stopemote, !status <text>, !join, !leave'
+				);
+			case '!ready':
+				return attempt(() => this.setReadiness(true), 'Ready!');
+			case '!unready':
+				return attempt(() => this.setReadiness(false), 'Not ready.');
+			case '!sitout':
+				return attempt(() => this.setSittingOut(true), 'Sitting out.');
+			case '!stopemote':
+			case '!stop':
+				return attempt(() => this.clearEmote(), 'Emote stopped.');
+			case '!status':
+				if (!args) return reply('Usage: !status <text>');
+				return attempt(() => this.setStatus(args), `Status set to ${args}.`);
+			case '!join':
+				return attempt(() => this.joinParty(friendId), (result) => result.content);
+			case '!leave':
+				return attempt(() => this.leaveParty(), 'Left the party.');
+			default:
+				return undefined;
+		}
 	}
 
 	// ----------------------------------------------------------------- misc

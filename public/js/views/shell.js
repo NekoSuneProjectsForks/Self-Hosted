@@ -11,6 +11,7 @@ import { renderLobby } from './lobby.js';
 import { renderFriends } from './friends.js';
 import { renderMessages } from './messages.js';
 import { renderMatches } from './matches.js';
+import { renderBotLobby } from './botlobby.js';
 
 /** Total unread DMs, surfaced in the nav so incoming messages are noticeable. */
 function messagesNavLabel() {
@@ -22,6 +23,7 @@ export function renderShell() {
 	const nav = [
 		['status', 'activity', 'Live Bots'],
 		['lobby', 'users', 'Lobby'],
+		['botlobby', 'bot', 'Bot Lobby'],
 		['friends', 'contact', 'Friends'],
 		['messages', 'message-square', messagesNavLabel()],
 		['matches', 'swords', 'Matches'],
@@ -67,7 +69,8 @@ export function renderShell() {
 						</div>
 						<h1 class="text-2xl font-bold text-zinc-50 sm:text-3xl">${viewTitle()}</h1>
 					</div>
-					<div class="flex flex-wrap gap-2">
+					<div class="flex flex-wrap items-center gap-2">
+						${controlPicker()}
 						<button class="btn-primary" data-action="start" ${runtimeOnline() ? 'disabled' : ''}>${icon('power')} Start Cluster</button>
 						<button class="btn-danger" data-action="stop" ${!runtimeOnline() ? 'disabled' : ''}>${icon('square')} Stop Cluster</button>
 					</div>
@@ -82,7 +85,28 @@ export function renderShell() {
 	`;
 }
 
+/** Chooses which bot the Lobby / Friends / Messages / Matches / Items pages act on. */
+function controlPicker() {
+	const helpers = (state.botAccounts || []).filter((account) => account.status === 'online' && account.accountId);
+	if (!helpers.length) return '';
+	const mainName = state.bots?.[0]?.nickname || 'Main bot';
+	return `
+		<label class="flex items-center gap-2 text-sm text-zinc-400">
+			${icon('gamepad-2')}
+			<select class="input py-1" data-action="control-bot" title="Which bot the live pages control">
+				<option value="" ${!state.controlBotId ? 'selected' : ''}>${escapeHtml(mainName)} (main)</option>
+				${helpers
+					.map(
+						(account) =>
+							`<option value="${escapeHtml(account.accountId)}" ${state.controlBotId === account.accountId ? 'selected' : ''}>${escapeHtml(account.label)}${account.displayName ? ` (${escapeHtml(account.displayName)})` : ''}</option>`
+					)
+					.join('')}
+			</select>
+		</label>`;
+}
+
 export function viewTitle() {
+	if (state.view === 'botlobby') return 'Bot Lobby';
 	if (state.view === 'lobby') return 'Lobby';
 	if (state.view === 'friends') return 'Friends';
 	if (state.view === 'messages') return 'Messages';
@@ -96,6 +120,7 @@ export function viewTitle() {
 }
 
 export function renderView() {
+	if (state.view === 'botlobby') return renderBotLobby();
 	if (state.view === 'lobby') return renderLobby();
 	if (state.view === 'friends') return renderFriends();
 	if (state.view === 'messages') return renderMessages();

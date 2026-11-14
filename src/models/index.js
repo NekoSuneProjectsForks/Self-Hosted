@@ -6,6 +6,7 @@ import { BotLog } from './BotLog.js';
 import './associations.js';
 
 export { sequelize } from './sequelize.js';
+export { BotAccount } from './BotAccount.js';
 export { BotConfig } from './BotConfig.js';
 export { BotLog } from './BotLog.js';
 export { BotSession } from './BotSession.js';

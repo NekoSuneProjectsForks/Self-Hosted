@@ -1,3 +1,4 @@
+import { BotAccount } from './BotAccount.js';
 import { BotConfig } from './BotConfig.js';
 import { BotLog } from './BotLog.js';
 import { BotSession } from './BotSession.js';
@@ -32,3 +33,5 @@ User.hasMany(MatchRound, { foreignKey: 'userId', onDelete: 'CASCADE' });
 MatchRound.belongsTo(User, { foreignKey: 'userId' });
 BotSession.hasMany(MatchRound, { foreignKey: 'botSessionId', onDelete: 'CASCADE' });
 MatchRound.belongsTo(BotSession, { foreignKey: 'botSessionId' });
+User.hasMany(BotAccount, { foreignKey: 'userId', onDelete: 'CASCADE' });
+BotAccount.belongsTo(User, { foreignKey: 'userId' });

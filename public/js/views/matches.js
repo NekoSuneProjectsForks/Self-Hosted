@@ -1,8 +1,9 @@
 import { state } from '../core/state.js';
+import { controlBot, controlBotId, controlCan, controlCapabilities, controlOnline } from '../core/selectors.js';
 import { escapeHtml, formatDate, icon, statusBadge, valueOrDash } from '../core/ui.js';
 
 function can(capability) {
-	return state.runtime?.capabilities?.capabilities?.[capability] === true;
+	return controlCan(capability);
 }
 
 function formatDuration(seconds) {
@@ -96,7 +97,7 @@ export function renderMatches() {
 		return `
 			<div class="shell-panel rounded-lg p-6 text-center">
 				<p class="font-semibold">Not supported by this engine</p>
-				<p class="mt-1 text-sm text-zinc-500">The ${escapeHtml(state.runtime?.capabilities?.engine || 'active')} engine does not report match state to this dashboard.</p>
+				<p class="mt-1 text-sm text-zinc-500">The ${escapeHtml(controlCapabilities()?.engine || 'active')} engine does not report match state to this dashboard.</p>
 			</div>
 		`;
 	}

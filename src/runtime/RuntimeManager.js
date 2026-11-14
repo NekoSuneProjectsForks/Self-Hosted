@@ -11,9 +11,31 @@ import { runtimeError } from './BaseRuntime.js';
 import { BotLog, FriendMessage, pruneLogs } from '../models/index.js';
 import { closeActiveSessions, recordBotSnapshot } from '../services/sessionHistory.js';
 import { closeMatchRound, openMatchRound } from '../services/matchTracker.js';
+import {
+	getBotAccount,
+	listBotAccounts,
+	sanitizeAccount,
+	saveBotAccountDeviceAuth,
+	saveBotAccountIdentity
+} from '../services/botAccounts.js';
 
 const ROOM_PREFIX = 'user:';
 const MEMORY_LOG_LIMIT = 200;
+const FRIEND_WAIT_MS = 15000;
+const INVITE_WAIT_MS = 15000;
+
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(check, timeoutMs, stepMs = 500) {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (check()) return true;
+		await sleep(stepMs);
+	}
+	return check();
+}
 
 /** Config keys that genuinely need a process restart to take effect. */
 const RESTART_REQUIRED_KEYS = [
@@ -103,7 +125,8 @@ const OFFLINE_CAPABILITIES = {
 			matchTracking: true,
 			searchUsers: true,
 			promoteMember: true,
-			multiBot: false
+			multiBot: true,
+			dmCommands: true
 		}
 	},
 	fnlb: {
@@ -141,6 +164,9 @@ export class RuntimeManager {
 	constructor(io) {
 		this.io = io;
 		this.runtimes = new Map();
+		// userId -> Map(botAccountId -> extra bot entry). Extra bots are always
+		// local fnbr clients and run independently of the main runtime.
+		this.helpers = new Map();
 	}
 
 	get(userId) {
@@ -329,7 +355,8 @@ export class RuntimeManager {
 			onDeviceAuth: saveDeviceAuthForUser,
 			onSnapshot: recordBotSnapshot,
 			onFriendMessage: (id, message) => this.handleFriendMessage(id, message),
-			onMatchState: (id, event) => this.handleMatchState(id, event)
+			onMatchState: (id, event) => this.handleMatchState(id, event),
+			trustedIds: () => this.helperAccountIds(userId)
 		});
 	}
 
@@ -410,6 +437,12 @@ export class RuntimeManager {
 			this.scheduleRestart(userId);
 			this.appendLog(userId, `${startConfig.mode === 'fnbr' ? 'Local fnbr bot' : 'FNLB cluster'} is online.`, 1);
 			this.emitStatus(userId);
+			if (startConfig.mode === 'fnbr') {
+				// Not awaited: extra bots logging in must not delay the main start.
+				this.autoStartHelpers(user).catch((error) =>
+					this.appendLog(userId, `Extra bot auto-start failed: ${error.message}`, 4)
+				);
+			}
 		} catch (error) {
 			runtime.status = error.status === 401 ? 'auth_required' : 'error';
 			runtime.authRequired = error.status === 401;
@@ -457,8 +490,9 @@ export class RuntimeManager {
 
 		const previous = runtime.adapter;
 		const wasFnlb = runtime.activeMode === 'fnlb';
+		const previousBotId = previous.engine === 'fnbr' ? previous.botId?.() : null;
 		await previous.stop().catch((error) => this.appendLog(userId, `Stop warning: ${error.message}`, 4));
-		await closeActiveSessions(userId).catch(() => {});
+		await closeActiveSessions(userId, previousBotId).catch(() => {});
 
 		if (wasFnlb && runtime.autoUpdateOnRestart && typeof previous.update === 'function') {
 			this.appendLog(userId, 'Checking for FNLB updates before restart...', 2);
@@ -505,10 +539,13 @@ export class RuntimeManager {
 		this.emitStatus(userId);
 		this.appendLog(userId, `Stopping ${runtime.activeMode === 'fnbr' ? 'local fnbr bot' : 'FNLB cluster'}...`, 2);
 		try {
+			// Read before stop(): the fnbr adapter forgets its client on logout.
+			const botId = runtime.adapter.botId?.();
+			const mainOnly = runtime.adapter.engine === 'fnbr' ? botId : null;
 			await runtime.adapter.stop();
 			// Close out history so sessions and matches are not left "active".
-			await closeMatchRound(userId, { botId: runtime.adapter.botId?.() }).catch(() => {});
-			await closeActiveSessions(userId).catch(() => {});
+			await closeMatchRound(userId, { botId }).catch(() => {});
+			await closeActiveSessions(userId, mainOnly).catch(() => {});
 
 			runtime.status = 'offline';
 			runtime.adapter = null;
@@ -530,7 +567,11 @@ export class RuntimeManager {
 
 	async stopAll() {
 		const ids = [...this.runtimes.keys()];
-		await Promise.allSettled(ids.map((userId) => this.stop(userId, 'Server shutting down.')));
+		const helperUsers = [...this.helpers.keys()];
+		await Promise.allSettled([
+			...ids.map((userId) => this.stop(userId, 'Server shutting down.')),
+			...helperUsers.map((userId) => this.stopHelpers(userId))
+		]);
 	}
 
 	// -------------------------------------------------------------- routing
@@ -540,7 +581,18 @@ export class RuntimeManager {
 	 * Routes must use this instead of reading the saved config, otherwise a
 	 * config change can point the UI at an engine that is not running.
 	 */
-	requireActive(userId) {
+	requireActive(userId, botId = null) {
+		// A botId that belongs to one of the user's extra accounts routes to that
+		// bot; anything else (including FNLB bot IDs) goes to the main runtime.
+		if (botId) {
+			const helper = this.findHelperByBotId(userId, botId);
+			if (helper) {
+				if (!helper.adapter || helper.status !== 'online') {
+					throw runtimeError(409, `${helper.label} is not online. Start it from Bot Lobby first.`);
+				}
+				return helper.adapter;
+			}
+		}
 		const runtime = this.get(userId);
 		if (!runtime.adapter || runtime.status !== 'online') {
 			throw runtimeError(409, 'No bot runtime is online. Start the bot first.');
@@ -603,5 +655,321 @@ export class RuntimeManager {
 
 	localCategory(config) {
 		return localCategoryOf(config);
+	}
+
+	// ------------------------------------------------------------ extra bots
+
+	helperMap(userId) {
+		if (!this.helpers.has(userId)) this.helpers.set(userId, new Map());
+		return this.helpers.get(userId);
+	}
+
+	helperEntry(userId, account) {
+		const map = this.helperMap(userId);
+		if (!map.has(account.id)) {
+			map.set(account.id, {
+				id: account.id,
+				label: account.label,
+				accountId: account.accountId || null,
+				status: 'offline',
+				adapter: null,
+				lastError: null,
+				authRequired: false,
+				startedAt: null
+			});
+		}
+		const entry = map.get(account.id);
+		entry.label = account.label;
+		if (account.accountId) entry.accountId = account.accountId;
+		return entry;
+	}
+
+	findHelperByBotId(userId, botId) {
+		for (const entry of this.helpers.get(userId)?.values() || []) {
+			if (entry.accountId === botId || entry.adapter?.botId?.() === botId) return entry;
+		}
+		return null;
+	}
+
+	mainBotId(userId) {
+		const adapter = this.get(userId).adapter;
+		return adapter?.engine === 'fnbr' ? adapter.botId?.() || null : null;
+	}
+
+	helperAccountIds(userId) {
+		return [...(this.helpers.get(userId)?.values() || [])].map((entry) => entry.accountId).filter(Boolean);
+	}
+
+	/** Account IDs of every bot this user runs, used for mutual trust. */
+	allBotIds(userId) {
+		return [this.mainBotId(userId), ...this.helperAccountIds(userId)].filter(Boolean);
+	}
+
+	isHelperRunning(entry) {
+		return ['starting', 'online', 'stopping'].includes(entry?.status);
+	}
+
+	serializeHelper(userId, account) {
+		const entry = this.helperEntry(userId, account);
+		return {
+			...sanitizeAccount(account),
+			status: entry.status,
+			lastError: entry.lastError,
+			authRequired: entry.authRequired,
+			startedAt: entry.startedAt,
+			bot: entry.adapter && entry.status === 'online' ? entry.adapter.toBotCard() : null
+		};
+	}
+
+	async listHelpers(userId) {
+		const accounts = await listBotAccounts(userId);
+		// Forget runtime entries for accounts that were deleted.
+		const ids = new Set(accounts.map((account) => account.id));
+		const map = this.helperMap(userId);
+		for (const id of map.keys()) {
+			if (!ids.has(id) && !map.get(id).adapter) map.delete(id);
+		}
+		return accounts.map((account) => this.serializeHelper(userId, account));
+	}
+
+	async emitHelpers(userId) {
+		try {
+			this.emitTo(userId, 'bot-accounts:updated', { accounts: await this.listHelpers(userId) });
+		} catch {
+			// Status pushes are best-effort.
+		}
+	}
+
+	/** Builds an extra bot's start config from the main config plus its own auth. */
+	async helperStartConfig(userId, account) {
+		const mainConfig = await getPlainConfig(userId);
+		const startConfig = validateStartConfig({
+			...mainConfig,
+			runtimeMode: 'fnbr',
+			deviceAuth: account.deviceAuth,
+			authorizationCode: account.authorizationCode
+		});
+		// Each account has its own tokens; never let one bot kick another's session.
+		return { ...startConfig, killOtherTokens: false };
+	}
+
+	createHelperAdapter(userId, account, startConfig) {
+		const adapter = new LocalFnbrRuntime({
+			userId,
+			startConfig,
+			plainConfig: startConfig,
+			appendLog: (_id, content, format) => this.appendLog(userId, `[${account.label}] ${content}`, format),
+			emit: (event, payload) => this.emitTo(userId, event, payload),
+			onDeviceAuth: (_id, deviceAuth) => saveBotAccountDeviceAuth(userId, account.id, deviceAuth),
+			onSnapshot: recordBotSnapshot,
+			onFriendMessage: (id, message) => this.handleFriendMessage(id, message),
+			onMatchState: (id, event) => this.handleMatchState(id, event),
+			trustedIds: () => this.allBotIds(userId).filter((id) => id !== adapter.botId())
+		});
+		return adapter;
+	}
+
+	async startHelper(user, accountRowId) {
+		const userId = user.id;
+		if (user.status === 'suspended') throw runtimeError(403, 'This account is suspended and cannot start a bot.');
+		const account = await getBotAccount(userId, accountRowId);
+		const entry = this.helperEntry(userId, account);
+		if (this.isHelperRunning(entry)) throw runtimeError(409, `${account.label} is already running.`);
+		if (!account.deviceAuth?.accountId && !account.authorizationCode) {
+			throw runtimeError(400, `${account.label} has no Epic login. Add a fresh authorization code first.`);
+		}
+
+		entry.status = 'starting';
+		entry.lastError = null;
+		entry.authRequired = false;
+		this.emitHelpers(userId);
+
+		try {
+			const startConfig = await this.helperStartConfig(userId, account);
+			const adapter = this.createHelperAdapter(userId, account, startConfig);
+			entry.adapter = adapter;
+			await adapter.start();
+
+			const botId = adapter.botId();
+			const duplicate =
+				botId === this.mainBotId(userId) ||
+				[...this.helperMap(userId).values()].some((other) => other !== entry && other.accountId === botId);
+			if (duplicate) {
+				await adapter.stop().catch(() => {});
+				throw runtimeError(409, 'That Epic account is already running as another bot. Use a different account.');
+			}
+
+			entry.accountId = botId;
+			entry.status = 'online';
+			entry.startedAt = new Date().toISOString();
+			await saveBotAccountIdentity(userId, account.id, {
+				accountId: botId,
+				displayName: adapter.client?.user?.self?.displayName
+			}).catch(() => {});
+			this.appendLog(userId, `[${account.label}] Extra bot is online.`, 1);
+		} catch (error) {
+			entry.adapter = null;
+			entry.status = error.status === 401 ? 'auth_required' : 'error';
+			entry.authRequired = error.status === 401;
+			entry.lastError = error.message;
+			entry.startedAt = null;
+			this.appendLog(userId, `[${account.label}] Start failed: ${error.message}`, 4);
+			throw error;
+		} finally {
+			this.emitHelpers(userId);
+		}
+		return entry;
+	}
+
+	async stopHelper(userId, accountRowId, reason = 'Extra bot stopped.') {
+		const entry = this.helperMap(userId).get(accountRowId);
+		if (!entry) return;
+		if (!entry.adapter) {
+			entry.status = 'offline';
+			entry.startedAt = null;
+			this.emitHelpers(userId);
+			return;
+		}
+		entry.status = 'stopping';
+		this.emitHelpers(userId);
+		const adapter = entry.adapter;
+		try {
+			const botId = adapter.botId();
+			await adapter.stop();
+			await closeMatchRound(userId, { botId }).catch(() => {});
+			await closeActiveSessions(userId, botId).catch(() => {});
+			this.appendLog(userId, `[${entry.label}] ${reason}`, 1);
+		} finally {
+			entry.adapter = null;
+			entry.status = 'offline';
+			entry.startedAt = null;
+			this.emitHelpers(userId);
+		}
+	}
+
+	async stopHelpers(userId, reason = 'Server shutting down.') {
+		const ids = [...(this.helpers.get(userId)?.keys() || [])];
+		await Promise.allSettled(ids.map((id) => this.stopHelper(userId, id, reason)));
+	}
+
+	async startHelpers(user, { onlyAutoStart = false } = {}) {
+		const accounts = await listBotAccounts(user.id);
+		const results = [];
+		for (const account of accounts) {
+			if (onlyAutoStart && !account.autoStart) continue;
+			if (this.isHelperRunning(this.helperEntry(user.id, account))) continue;
+			try {
+				await this.startHelper(user, account.id);
+				results.push({ id: account.id, label: account.label, ok: true });
+			} catch (error) {
+				results.push({ id: account.id, label: account.label, ok: false, error: error.message });
+			}
+		}
+		return results;
+	}
+
+	/** Runs after the main bot comes online: start auto-start bots and seat them. */
+	async autoStartHelpers(user) {
+		const results = await this.startHelpers(user, { onlyAutoStart: true });
+		for (const result of results.filter((row) => row.ok)) {
+			await this.joinHelperToMain(user.id, result.id).catch((error) =>
+				this.appendLog(user.id, `[${result.label}] Could not join the main lobby: ${error.message}`, 4)
+			);
+		}
+	}
+
+	requireOnlineHelper(userId, accountRowId) {
+		const entry = this.helpers.get(userId)?.get(accountRowId);
+		if (!entry?.adapter || entry.status !== 'online') {
+			throw runtimeError(409, `${entry?.label || 'That bot'} is not online. Start it first.`);
+		}
+		return entry;
+	}
+
+	/** Makes `clientA` and `clientB` friends: A sends the request, B accepts it. */
+	async ensureFriends(clientA, clientB) {
+		const idA = clientA.user.self.id;
+		const idB = clientB.user.self.id;
+		if (clientA.friend.resolve(idB)) return;
+
+		const incomingOnA = clientA.friend.resolvePending(idB);
+		if (incomingOnA?.direction === 'INCOMING') {
+			await incomingOnA.accept().catch(() => {});
+		} else {
+			await clientA.friend.add(idB);
+			// B trusts A and auto-accepts; accept explicitly too in case that raced.
+			await waitFor(() => Boolean(clientB.friend.resolvePending(idA) || clientB.friend.resolve(idA)), FRIEND_WAIT_MS);
+			const pendingOnB = clientB.friend.resolvePending(idA);
+			if (pendingOnB?.direction === 'INCOMING') await pendingOnB.accept().catch(() => {});
+		}
+
+		const ok = await waitFor(() => Boolean(clientA.friend.resolve(idB)), FRIEND_WAIT_MS);
+		if (!ok) throw runtimeError(504, 'The bots did not become friends in time. Try again in a moment.');
+	}
+
+	/**
+	 * Puts an extra bot into the main bot's lobby: a direct join when the party
+	 * is joinable, otherwise friend + invite (the extra bot trusts the main bot,
+	 * so it accepts that invite automatically).
+	 */
+	async joinHelperToMain(userId, accountRowId) {
+		const main = this.requireLocal(userId);
+		const entry = this.requireOnlineHelper(userId, accountRowId);
+		const mainClient = main.requireClient();
+		const helperClient = entry.adapter.requireClient();
+		const partyId = mainClient.party?.id;
+		if (!partyId) throw runtimeError(409, 'The main bot is not in a party yet.');
+		if (helperClient.party?.id === partyId) {
+			return { content: `${entry.label} is already in the main lobby.`, format: 1 };
+		}
+		if ((mainClient.party.size ?? 1) >= (mainClient.party.maxSize ?? 16)) {
+			throw runtimeError(409, 'The main lobby is full.');
+		}
+
+		let joined = false;
+		try {
+			await helperClient.joinParty(partyId);
+			joined = true;
+		} catch {
+			// Private party or not visible to this account: fall back to an invite.
+		}
+
+		if (!joined) {
+			await this.ensureFriends(mainClient, helperClient);
+			await mainClient.invite(helperClient.user.self.id);
+			joined = await waitFor(() => helperClient.party?.id === partyId, INVITE_WAIT_MS);
+			if (!joined) throw runtimeError(504, `${entry.label} was invited but did not join in time.`);
+		}
+
+		entry.adapter.emitParty();
+		main.emitParty();
+		this.appendLog(userId, `[${entry.label}] Joined the main bot's lobby.`, 1);
+		return { content: `${entry.label} joined the main lobby.`, format: 1 };
+	}
+
+	async forEachOnlineHelper(userId, action) {
+		const results = [];
+		for (const entry of this.helpers.get(userId)?.values() || []) {
+			if (entry.status !== 'online') continue;
+			try {
+				results.push({ id: entry.id, label: entry.label, ok: true, ...(await action(entry)) });
+			} catch (error) {
+				results.push({ id: entry.id, label: entry.label, ok: false, error: error.message });
+			}
+		}
+		return results;
+	}
+
+	joinAllHelpersToMain(userId) {
+		return this.forEachOnlineHelper(userId, (entry) => this.joinHelperToMain(userId, entry.id));
+	}
+
+	/** Every online extra bot joins a friend's party (each must be their friend). */
+	joinAllHelpersTo(userId, target) {
+		return this.forEachOnlineHelper(userId, (entry) => entry.adapter.joinParty(target));
+	}
+
+	leaveAllHelpers(userId) {
+		return this.forEachOnlineHelper(userId, (entry) => entry.adapter.leaveParty());
 	}
 }

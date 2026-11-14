@@ -9,7 +9,7 @@ It supports **two independent engines**:
 | Runtime | `fnbr.js` running in this process | FNLB cloud platform + `fnlb` package |
 | Needs an FNLB account/API token | **No** | Yes |
 | Needs `fnlb.net` / `api.fnlb.net` | **No** | Yes |
-| Multiple bots | One account | Shards / many bots |
+| Multiple bots | Main bot + up to 15 extra accounts ([Bot Lobby](#bot-lobby-multiple-local-bots)) | Shards / many bots |
 | Realtime cosmetics | Yes | No (see [Engine capabilities](#engine-capabilities)) |
 | Friend DMs | Yes | No |
 
@@ -151,6 +151,49 @@ bot immediately. "Equip Now" and "Save as Startup Loadout" are separate actions:
 saving a default never forces a restart, and equipping is only reported as
 successful once the runtime confirms it.
 
+## Bot Lobby (multiple local bots)
+
+The **Bot Lobby** page runs extra Epic accounts as their own fnbr clients next to
+the main bot, so you can fill a lobby with your own bots. No FNLB account is
+needed.
+
+- **Add a bot account**: give it a label and a one-time authorization code taken
+  while signed in as *that* account. Use a private window for each one. After the
+  first login its device auth is encrypted into SQLite and reused, just like the
+  main bot's.
+- **Start / Stop** each bot, or **Start all**. Starting while the main bot is
+  online seats the bot in the main lobby straight away.
+- **Join main lobby** tries a direct join first. If the party is private, the
+  main bot friends the extra bot and invites it, and the extra bot accepts.
+  Your own bots always accept each other's friend requests and invites, even
+  with auto-accept turned off.
+- **All join**: every online extra bot joins a friend's party, by name or party
+  ID. Each bot must be friends with that person. A private party gets a join
+  request instead.
+- **Auto-start** bots log in and join the main lobby whenever the main bot starts.
+- **Control**: the picker at the top switches the Lobby, Friends, Messages,
+  Matches and Items pages to any online extra bot. Every `/api/bots/:botId/*`
+  route accepts an extra bot's account ID.
+
+Extra bots use the main bot's platform, status and loadout. A party holds 16,
+so the limit is 15 extra accounts.
+
+### Friend DM commands
+
+Friends can message any local bot (main or extra):
+
+| Message | Effect |
+|---|---|
+| `CID_…` / `BID_…` / `Pickaxe_ID_…` / `EID_…` | Equip that outfit / backpack / pickaxe / emote |
+| `!ready` / `!unready` / `!sitout` | Readiness |
+| `!stopemote` | Clear the emote |
+| `!status <text>` | Presence status |
+| `!join` / `!leave` | Join the sender's party / leave the party |
+| `!help` | List the commands |
+
+Messages between your own bots are ignored, so two bots can never get into a
+loop. Set `dmCommands: false` in the local loadout config to turn the commands off.
+
 ### What is *not* claimed
 
 - Match stats (kills, placement, win) are **not** invented. Epic presence only
@@ -270,6 +313,12 @@ PATCH  /api/bots/:botId/cosmetics
 GET    /api/bots/:botId/matches
 GET    /api/bots/:botId/matches/:matchId
 GET    /api/users/search
+GET    /api/bot-accounts
+POST   /api/bot-accounts
+PATCH  /api/bot-accounts/:id
+DELETE /api/bot-accounts/:id
+POST   /api/bot-accounts/:id/start | /stop | /join-main | /clear-auth
+POST   /api/bot-lobby/start-all | /stop-all | /join-main | /join | /leave
 POST   /api/bot/start | /api/bot/stop | /api/bot/restart
 POST   /api/config/device-auth/clear
 ```
@@ -278,7 +327,9 @@ The older `/api/fnlb/*` routes still work for backwards compatibility.
 
 Socket.IO events: `bot:status`, `bot:log`, `bot:updated`, `friends:updated`,
 `friend:message`, `party:updated`, `party:message`, `cosmetics:updated`,
-`match:started`, `match:updated`, `match:ended`.
+`match:started`, `match:updated`, `match:ended`, `bot-accounts:updated`.
+Every bot event carries a `botId`, so the UI only applies events from the bot it
+is controlling.
 
 ---
 
@@ -305,6 +356,16 @@ npm start
 ```
 
 New database columns are added automatically at startup.
+
+### Automatic fnlb / fnbr updates
+
+`.github/workflows/update-fnlb-packages.yml` checks npm every 6 hours for new
+`fnlb` and `@fnlb-project/fnbr` releases. When one is out, it bumps
+`package.json` and the lockfile, runs the tests, and commits to `dashboard` only
+if they pass. You can also run it by hand from the Actions tab. A running server
+picks up the update with the normal `git pull && npm ci && npm start`. On
+Pterodactyl, enable the egg's git-pull-on-start option. The workflow needs
+**Settings → Actions → General → Workflow permissions → Read and write**.
 
 ---
 

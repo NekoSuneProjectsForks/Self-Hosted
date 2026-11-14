@@ -5,9 +5,9 @@ This file tracks **what is actually done**, and is updated as work lands.
 
 Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]` needs a real Epic/FNLB account to verify
 
-Last updated: 2026-09-17
+Last updated: 2026-11-14
 
-**Test status: 54/54 unit tests · 34/34 live API checks · 22/22 frontend render checks — all pass.**
+**Test status: 80/80 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -143,7 +143,7 @@ modules plus a 167-line wiring file.
 
 ## Deferred, with reasons
 - [ ] **Live FNLB cosmetics** — still deferred. The `fnlb` package only starts/stops/updates processes (verified in its typings) and no live cosmetic command is exposed; an attempt to consult the hosted FNLB docs did not yield a verifiable command list. Guessing is explicitly ruled out by the task, so the adapter reports `realtimeCosmetics: false` and returns `appliedLive: false` + `requiresReload: true`.
-- [ ] **Multi-account local bots** (`LocalBotAccount`) — the task says to architect for it but not to build it before one local bot is stable. The adapter layer supports it (one adapter instance per account, `RuntimeManager` already keys by user), so adding it is additive. No unused model was committed.
+- [x] **Multi-account local bots** — done as the Bot Lobby (see below).
 
 ## Legacy FNLB adapter gap (reported: "does not support declining friend requests")
 - [x] **Root cause**: the FNLB adapter only overrode a handful of methods, so `addFriend`, `acceptFriend`, `declineFriend`, `removeFriend`, `blockUser`, `unblockUser`, `inviteUser`, `joinParty`, `kickMember`, `leaveParty`, `setStatus`, `setPlaylist`, `setReadiness` and `hideMembers` all inherited `BaseRuntime`'s "unsupported" throw. Most of the Friends page and Lobby controls were dead in FNLB mode — a regression from the adapter refactor.
@@ -165,3 +165,18 @@ modules plus a 167-line wiring file.
 - [!] Anything needing a real FNLB API token
 - [!] `docker compose build` — Docker is not installed in this environment, so the Dockerfile is **unbuilt and unverified**
 - [!] A real SIGTERM shutdown — Windows does not deliver POSIX signals to child processes; the shutdown path is covered by unit tests instead
+
+## Bot Lobby + package updates (2026-11-14)
+- [x] `fnlb` ^1.1.24, `@fnlb-project/fnbr` ^4.2.75. The lockfile still pinned the old `fnbr` package, so `npm ci` was broken. Regenerated.
+- [x] **Startup crash with @fnlb-project/fnbr**: `presenceProbe` hooked `stomp.patchPresence`, which this package doesn't have (it sends presence over XMPP), so every local bot crashed at start. The probe now skips hooks that are missing.
+- [x] Scheduled GitHub Action auto-updates `fnlb` / `@fnlb-project/fnbr`, gated on tests
+- [x] `BotAccount` model: up to 15 extra Epic accounts per user, device auth encrypted
+- [x] `RuntimeManager` runs one fnbr client per extra account. `requireActive(userId, botId)` routes to the right bot, and all `/api/bots/:botId/*` routes pass `botId`
+- [x] Join main lobby: direct join, falling back to friend + invite. Your own bots always trust each other's friend requests and invites
+- [x] `joinParty` accepts a friend name (joins their party from presence, or sends a join request)
+- [x] Friend DM commands (`CID_`, `EID_`, `!ready`, `!join` and so on), ported from the old AquaPlaysYT lobby bot onto fnbr
+- [x] Frontend: Bot Lobby page, a header picker for which bot the live pages control, and socket events filtered by `botId`
+- [x] Main stop/restart now closes only the main bot's sessions, not the extra bots'
+- [x] `bots.routes.js` used `getBotSessions` without importing it
+- [x] `tests/botLobby.test.js` (15 tests)
+- [!] Needs a real test: extra bot login, direct join vs invite fallback on private parties, DM commands in game

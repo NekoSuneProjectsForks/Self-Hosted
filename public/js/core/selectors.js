@@ -67,3 +67,67 @@ export function dashboardAvailable() {
 	}
 	return state.config.apiTokenConfigured;
 }
+
+// ---- which bot the Lobby / Friends / Messages / Matches pages control ----
+
+const FNBR_CAPABILITIES = {
+	engine: 'fnbr',
+	capabilities: {
+		friends: true,
+		friendMessages: true,
+		friendRequests: true,
+		blockedUsers: true,
+		party: true,
+		partyChat: true,
+		cosmetics: true,
+		realtimeCosmetics: true,
+		playlist: true,
+		privacy: true,
+		readiness: true,
+		presence: true,
+		matchTracking: true,
+		searchUsers: true,
+		promoteMember: true,
+		multiBot: true,
+		dmCommands: true
+	}
+};
+
+/** The extra bot account currently being controlled, or null for the main bot. */
+export function controlledHelper() {
+	if (!state.controlBotId) return null;
+	return (state.botAccounts || []).find((account) => account.accountId === state.controlBotId) || null;
+}
+
+export function controlBotId() {
+	const helper = controlledHelper();
+	if (helper) return helper.accountId;
+	return state.bots?.[0]?.id || state.selectedBotId || null;
+}
+
+export function controlOnline() {
+	const helper = controlledHelper();
+	return helper ? helper.status === 'online' : state.runtime?.status === 'online';
+}
+
+export function controlBot() {
+	const helper = controlledHelper();
+	return helper ? helper.bot : state.bots?.[0] || null;
+}
+
+export function controlCapabilities() {
+	return controlledHelper() ? FNBR_CAPABILITIES : state.runtime?.capabilities;
+}
+
+export function controlCan(capability) {
+	return controlCapabilities()?.capabilities?.[capability] === true;
+}
+
+/** True when a socket payload belongs to the bot the pages are controlling. */
+export function isControlled(botId) {
+	return !botId || botId === controlBotId();
+}
+
+export function isHelperBotId(botId) {
+	return Boolean(botId) && (state.botAccounts || []).some((account) => account.accountId === botId);
+}

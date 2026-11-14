@@ -13,6 +13,12 @@ export const state = {
 	categories: [],
 	selectedBotId: null,
 	selectedBotDetails: null,
+	// Bot Lobby: extra Epic accounts, and which bot the live pages control
+	// (null = the main bot).
+	botAccounts: [],
+	maxBotAccounts: 15,
+	mainBotId: null,
+	controlBotId: null,
 	quickCommands: [],
 	userSearchResults: [],
 	itemSearchResults: [],
