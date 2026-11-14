@@ -154,6 +154,11 @@ function settingsPanel() {
 				<input class="input w-24 py-1" type="number" min="1" max="60" step="0.5" value="${escapeHtml(String(settings.emoteSeconds ?? 6))}" data-action="lobby-emote-seconds" ${settings.emotePlayOnce ? '' : 'disabled'} />
 				seconds <span class="text-xs text-zinc-500">(most dances are 4 to 8 s)</span>
 			</label>
+			<label class="mt-3 flex flex-wrap items-center gap-2 text-sm text-zinc-300">
+				Fortnite build (netCL)
+				<input class="input w-40 py-1" placeholder="Automatic" value="${escapeHtml(settings.partyBuildId ? String(settings.partyBuildId).split(':').pop() : '')}" data-action="lobby-build" />
+				<span class="text-xs text-zinc-500">Leave empty: the bot looks it up. Set it if the Matchmaking check says the build is unknown. Applies when a bot starts.</span>
+			</label>
 		</section>
 	`;
 }

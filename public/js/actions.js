@@ -368,6 +368,11 @@ document.addEventListener('click', async (event) => {
 			render();
 			return;
 		}
+		if (action === 'matchmaking-check') {
+			state.matchmakingCheck = await api(`/api/bots/${encodeURIComponent(activeBotId())}/matchmaking-check`);
+			render();
+			return;
+		}
 		if (action === 'member-stats') {
 			const memberId = button.dataset.memberId;
 			state.memberStats = { ...state.memberStats, [memberId]: { loading: true } };
@@ -901,6 +906,19 @@ document.addEventListener('change', (event) => {
 	if (epicAck) {
 		state.epicCodeAck = epicAck.checked;
 		render();
+	}
+	const buildInput = event.target.closest('[data-action="lobby-build"]');
+	if (buildInput) {
+		api('/api/bot-lobby/settings', { method: 'PATCH', body: { partyBuildId: buildInput.value } })
+			.then((data) => {
+				state.lobbySettings = data.settings;
+				setToast(data.settings.partyBuildId ? `Fortnite build set to ${data.settings.partyBuildId.split(':').pop()}. Restart the bots to use it.` : 'Fortnite build set to automatic.');
+				render();
+			})
+			.catch((error) => {
+				setToast(error.message, 'error');
+				render();
+			});
 	}
 	const emoteSeconds = event.target.closest('[data-action="lobby-emote-seconds"]');
 	if (emoteSeconds) {

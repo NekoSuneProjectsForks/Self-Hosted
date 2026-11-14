@@ -726,3 +726,59 @@ describe('FNLB-style matchmaking', () => {
 		assert.equal(client.calls.some((c) => c[0] === 'leaveParty'), false);
 	});
 });
+
+describe('Fortnite build (netCL)', () => {
+	function buildClient({ partyBuild = '1:3:', fetched = '1:3:51234567', size = 1 } = {}) {
+		const client = fakeClient('bot');
+		client.config = { partyBuildId: '1:3:' };
+		client.party.size = size;
+		client.party.meta = { get: (key) => (key === 'urn:epic:cfg:build-id_s' ? partyBuild : '') };
+		client.fetchPartyBuildId = async () => {
+			if (!fetched) throw new Error('Matchmaking response did not contain a party build ID');
+			client.config.partyBuildId = fetched;
+			return fetched;
+		};
+		client.leaveParty = async (createNew) => client.calls.push(['leaveParty', createNew]);
+		client.setStatus = () => client.calls.push(['setStatus']);
+		const runtime = runtimeFor(client);
+		runtime.health = {};
+		return { client, runtime };
+	}
+
+	it('normalizes build IDs', async () => {
+		const { normalizeBuildId } = await import('../src/runtime/LocalFnbrRuntime.js');
+		assert.equal(normalizeBuildId('51234567'), '1:3:51234567');
+		assert.equal(normalizeBuildId('1:3:51234567'), '1:3:51234567');
+		assert.equal(normalizeBuildId('1:3:'), null);
+		assert.equal(normalizeBuildId(''), null);
+	});
+
+	it("looks the build up after login and recreates the bot's own party with it", async () => {
+		const { client, runtime } = buildClient();
+		await runtime.ensureGameBuild();
+		assert.equal(client.config.partyBuildId, '1:3:51234567');
+		assert.deepEqual(client.calls.find((c) => c[0] === 'leaveParty'), ['leaveParty', true]);
+		assert.equal(runtime.health.gameBuild, '1:3:51234567');
+	});
+
+	it('never recreates a party other people are in', async () => {
+		const { client, runtime } = buildClient({ size: 2 });
+		await runtime.ensureGameBuild();
+		assert.equal(client.calls.some((c) => c[0] === 'leaveParty'), false);
+	});
+
+	it('does nothing when the party already has the right build', async () => {
+		const { client, runtime } = buildClient({ partyBuild: '1:3:51234567' });
+		await runtime.ensureGameBuild();
+		assert.equal(client.calls.some((c) => c[0] === 'leaveParty'), false);
+	});
+
+	it('the matchmaking check flags an unknown build', async () => {
+		const { client, runtime } = buildClient({ fetched: null });
+		await runtime.ensureGameBuild();
+		client.party.members = new Map([['bot', { id: 'bot' }]]);
+		const check = runtime.matchmakingCheck();
+		assert.equal(check.botBuild, null);
+		assert.match(check.problems.join(' '), /does not know the Fortnite build/);
+	});
+});

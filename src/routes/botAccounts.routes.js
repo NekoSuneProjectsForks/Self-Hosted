@@ -8,6 +8,7 @@ import {
 } from '../services/botAccounts.js';
 import { asyncRoute, httpError } from '../http/helpers.js';
 import { getPlainConfig, updateLocalCategoryConfig } from '../services/configStore.js';
+import { normalizeBuildId } from '../runtime/LocalFnbrRuntime.js';
 
 const LOBBY_SETTINGS = ['autoReady', 'leaveOnMatchStart', 'rejoinAfterMatch', 'botsSitOut', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
 
@@ -15,7 +16,8 @@ function settingsOf(config = {}) {
 	const seconds = Number(config.emoteSeconds);
 	return {
 		...Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, key === 'botsSitOut' ? config[key] === true : config[key] !== false])),
-		emoteSeconds: Number.isFinite(seconds) ? seconds : 6
+		emoteSeconds: Number.isFinite(seconds) ? seconds : 6,
+		partyBuildId: config.partyBuildId || ''
 	};
 }
 
@@ -178,10 +180,20 @@ export function registerBotAccountRoutes(ctx) {
 				seconds = Number(body.emoteSeconds);
 				if (!Number.isFinite(seconds) || seconds < 1 || seconds > 60) throw httpError(400, 'Emote length must be 1 to 60 seconds.');
 			}
-			if (!changes.length && seconds === undefined) throw httpError(400, 'No lobby setting was provided.');
+			let build;
+			if (body.partyBuildId !== undefined) {
+				const text = String(body.partyBuildId || '').trim();
+				build = text ? normalizeBuildId(text) : '';
+				if (build === null) throw httpError(400, 'The Fortnite build should be a number like 51234567 (or 1:3:51234567). Leave it empty for automatic.');
+			}
+			if (!changes.length && seconds === undefined && build === undefined) throw httpError(400, 'No lobby setting was provided.');
 			const localCategory = await updateLocalCategoryConfig(req.user.id, async (next) => {
 				for (const key of changes) next[key] = Boolean(body[key]);
 				if (seconds !== undefined) next.emoteSeconds = Math.round(seconds * 10) / 10;
+				if (build !== undefined) {
+					if (build) next.partyBuildId = build;
+					else delete next.partyBuildId;
+				}
 			});
 			runtime.applyLocalCategoryLive(req.user.id, localCategory);
 			return res.json({

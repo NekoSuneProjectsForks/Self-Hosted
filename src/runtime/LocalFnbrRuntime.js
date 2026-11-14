@@ -75,6 +75,13 @@ export function normalizeProfile(input = {}) {
 	return out;
 }
 
+/** "1:3:12345678" or a bare netCL → "1:3:12345678"; anything without a number → null. */
+export function normalizeBuildId(value) {
+	const text = String(value ?? '').trim();
+	const netCL = text.split(':').pop();
+	return /^\d{4,}$/.test(netCL || '') ? `1:3:${netCL}` : null;
+}
+
 /** The Duo/Trio/Squad version of a Solo playlist for `players` people. */
 export function teamPlaylistFor(playlistId, players) {
 	const id = String(playlistId || '');
@@ -254,6 +261,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				searchUsers: true,
 				promoteMember: true,
 				multiBot: true,
+				matchmakingCheck: true,
 				dmCommands: true,
 				autoReady: true,
 				playerStats: true
@@ -279,8 +287,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 		this.log('[Local fnbr] Preparing authentication', 2);
 
+		const manualBuild = normalizeBuildId(this.startConfig.partyBuildId || this.startConfig.localCategory?.config?.partyBuildId);
 		const client = new Client({
 			auth: { ...auth, killOtherTokens: this.startConfig.killOtherTokens },
+			...(manualBuild ? { partyBuildId: manualBuild } : {}),
 			platform: this.startConfig.platform,
 			defaultStatus: this.startConfig.defaultStatus,
 			createParty: true,
@@ -333,6 +343,9 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 		this.log(`[Local fnbr] Ready as ${client.user.self?.displayName || client.user.self?.id}`, 1);
 
+		// Must happen before the bot is used in a lobby; see ensureGameBuild().
+		await this.ensureGameBuild().catch((error) => this.log(`[Local fnbr] Game build check failed: ${error.message}`, 4));
+
 		// A failed startup loadout must not take the whole bot down with it.
 		this.defaultsPartyId = client.party?.id || null;
 		await this.applyCategory(this.startConfig.localCategory?.config || {}, false).catch((error) =>
@@ -340,6 +353,97 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		);
 
 		this.queueSnapshot();
+	}
+
+	/**
+	 * fnbr creates the bot's first party during login() with the default
+	 * partyBuildId "1:3:" (no Fortnite build number / netCL), and puts the same
+	 * value in the bot's presence. Fortnite then sees the bot as being on a
+	 * different game version, which can stop the party from matchmaking even
+	 * though everyone is ready. (fnbr >= 4.2.70 only looks the netCL up when
+	 * joining a party.) Fix: look the build up now and, if the bot is alone,
+	 * recreate its party so the party and presence carry the real build.
+	 */
+	async ensureGameBuild() {
+		const client = this.client;
+		if (!client) return;
+		let build = normalizeBuildId(client.config.partyBuildId);
+		if (!build) {
+			try {
+				build = normalizeBuildId(await client.fetchPartyBuildId());
+			} catch (error) {
+				this.log(`[Local fnbr] Could not look up the Fortnite build from Epic (${error.message}). It will be taken from a friend's party when one is seen, or set it under Server Config.`, 3);
+			}
+		}
+		this.health.gameBuild = build || 'unknown';
+		if (!build) return;
+		await this.adoptGameBuild(build, 'Epic');
+	}
+
+	/** Uses a build ID and refreshes the bot's own party/presence if it was wrong. */
+	async adoptGameBuild(build, source) {
+		const client = this.client;
+		if (!client || !build) return;
+		const partyBuild = safeValue(() => client.party?.meta?.get?.('urn:epic:cfg:build-id_s'), null);
+		const changed = normalizeBuildId(client.config.partyBuildId) !== build;
+		client.config.partyBuildId = build;
+		this.health.gameBuild = build;
+		const partyNeedsIt = partyBuild !== build || changed;
+		if (!partyNeedsIt) return;
+		this.log(`[Local fnbr] Fortnite build ${build.split(':').pop()} (from ${source}).`, 2);
+		// Only rebuild the party when the bot is on its own, so nobody is kicked.
+		if ((client.party?.size ?? 1) <= 1) {
+			await client.leaveParty(true).catch((error) => this.log(`[Local fnbr] Could not refresh the party: ${error.message}`, 4));
+			this.log('[Local fnbr] Party recreated with the correct game build.', 1);
+		}
+		try {
+			client.setStatus(this.startConfig.defaultStatus);
+		} catch {
+			// Presence refresh is best-effort.
+		}
+		this.emitParty();
+	}
+
+	/** Diagnostics for "no match found": what the bot is telling Fortnite. */
+	matchmakingCheck() {
+		const client = this.requireClient();
+		const party = client.party;
+		const me = party?.me;
+		const meta = (member, key) => safeValue(() => member?.meta?.get?.(key), null);
+		const build = normalizeBuildId(client.config.partyBuildId);
+		const partyBuild = safeValue(() => party?.meta?.get?.('urn:epic:cfg:build-id_s'), null);
+		const members = collectionValues(party?.members).map((member) => ({
+			id: member.id,
+			displayName: member.displayName || null,
+			isBot: member.id === client.user.self.id || this.isTrusted(member.id),
+			isLeader: safeValue(() => member.isLeader, false),
+			ready: safeValue(() => meta(member, 'Default:MatchmakingInfo_j')?.MatchmakingInfo?.readyStatus, null),
+			platform: safeValue(() => member.platform, null),
+			crossplay: meta(member, 'Default:CrossplayPreference_s'),
+			location: safeValue(() => member.matchInfo?.location, null)
+		}));
+		const playlistId = serializeParty(party)?.playlistId || null;
+		const problems = [];
+		if (!build) problems.push('The bot does not know the Fortnite build (netCL); it may look like a different game version. Set it under Server Config.');
+		if (build && partyBuild && partyBuild !== build) problems.push(`The party was created with build "${partyBuild}" but the bot now uses "${build}". Make the bot leave and rejoin.`);
+		if (/solo/i.test(playlistId || '') && members.length > 1) problems.push('Solo playlist with more than one member.');
+		if (members.filter((m) => m.isBot).length > 1) problems.push('More than one of your bots is in the party.');
+		if (safeValue(() => party.squadFill, null) === true) problems.push('Fill is on; FNLB recommends No Fill.');
+		for (const m of members) if (m.crossplay && m.crossplay !== 'OptedIn') problems.push(`${m.displayName || m.id} has crossplay ${m.crossplay}.`);
+		return {
+			botBuild: build || null,
+			partyBuild,
+			partyId: party?.id || null,
+			playlistId,
+			squadFill: safeValue(() => party.squadFill, null),
+			me: {
+				ready: meta(me, 'Default:MatchmakingInfo_j')?.MatchmakingInfo?.readyStatus ?? null,
+				lobbyState: meta(me, 'Default:LobbyState_j')?.LobbyState ?? null,
+				downloadProgress: meta(me, 'Default:DownloadOnDemandProgress_d')
+			},
+			members,
+			problems
+		};
 	}
 
 	isAuthError(error) {
@@ -493,7 +597,14 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		for (const event of ['friend:presence', 'friend:online', 'friend:offline']) {
 			client.on(event, () => this.emitFriendsThrottled());
 		}
-		client.on('friend:presence', (_before, after) => this.onFriendPresence(after));
+		client.on('friend:presence', (_before, after) => {
+			this.onFriendPresence(after);
+			// No build yet? A real player's party presence carries it.
+			if (!normalizeBuildId(client.config.partyBuildId)) {
+				const build = normalizeBuildId(safeValue(() => after?.friend?.party?.buildId, null));
+				if (build) this.adoptGameBuild(build, `${after.friend.displayName || 'a friend'}'s party`).catch(() => {});
+			}
+		});
 
 		for (const event of ['user:blocked', 'user:unblocked']) {
 			client.on(event, () => {

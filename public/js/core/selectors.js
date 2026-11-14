@@ -94,6 +94,7 @@ const FNBR_CAPABILITIES = {
 		searchUsers: true,
 		promoteMember: true,
 		multiBot: true,
+		matchmakingCheck: true,
 		dmCommands: true,
 		autoReady: true,
 		playerStats: true

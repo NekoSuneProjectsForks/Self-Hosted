@@ -269,6 +269,19 @@ FNLB's guide: invite **one** bot, use **Duos, Trios or Squads** (not Solo) with
 - **Rejoin after the match**: when that player's presence shows them back in a
   lobby, the bot rejoins their party (if it's joinable; otherwise invite it).
 
+**Game build (netCL)**: fnbr creates the bot's first party at login with the
+build ID `1:3:` (no Fortnite build number) and advertises the same in its
+presence, so Fortnite can treat the bot as being on another game version. Since
+fnbr 4.2.70 the number is only looked up when *joining* a party (reported in
+Fortnite-LobbyBot/fnbr.js#11). The bot now looks it up right after login and
+recreates its own party with it (only while it's alone), falls back to a
+friend's party presence, and can be set by hand under **Lobby behaviour →
+Fortnite build**.
+
+**Matchmaking check** (Lobby page) shows what the bot is telling Fortnite: build,
+party build, playlist, fill, each member's readiness, crossplay and platform,
+plus a list of problems. The raw output is there to copy when asking for help.
+
 Turn each of these on or off under **Bots → Lobby behaviour**. **Sit out instead
 of readying** is still there (off by default) for parties that want to play
 without the bot.

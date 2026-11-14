@@ -183,6 +183,7 @@ export function renderLobby() {
 			</section>
 
 			${renderLobbyControls(isLeader)}
+			${renderMatchmakingCheck()}
 
 			<section>
 				<h2 class="mb-3 text-sm font-semibold uppercase text-zinc-500">Party members (${members.length})</h2>
@@ -194,6 +195,32 @@ export function renderLobby() {
 			${renderLobbyChat()}
 		</div>
 	`;
+}
+
+/** "No match found" diagnostics for the controlled bot. */
+function renderMatchmakingCheck() {
+	if (!can('matchmakingCheck')) return '';
+	const check = state.matchmakingCheck;
+	const problems = check?.problems || [];
+	return `
+		<section class="shell-panel rounded-lg p-4">
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<p class="font-semibold">Matchmaking check</p>
+					<p class="mt-1 text-sm text-zinc-500">Can't find a match? Ready up, start matchmaking, then run this to see what the bot is telling Fortnite.</p>
+				</div>
+				<button class="btn-secondary shrink-0" data-action="matchmaking-check">${icon('stethoscope')} Run check</button>
+			</div>
+			${check
+				? `<div class="mt-3 grid gap-2 text-sm">
+						${problems.length
+							? problems.map((text) => `<p class="flex gap-2 text-amber-200">${icon('triangle-alert', 'mt-0.5 h-4 w-4 shrink-0')} ${escapeHtml(text)}</p>`).join('')
+							: `<p class="flex gap-2 text-fnlb-200">${icon('circle-check', 'mt-0.5 h-4 w-4 shrink-0')} No problems found on the bot's side.</p>`}
+						<p class="text-xs text-zinc-500">Bot build: <span class="font-mono">${escapeHtml(check.botBuild || 'unknown')}</span> · party build: <span class="font-mono">${escapeHtml(check.partyBuild || '-')}</span> · playlist: <span class="font-mono">${escapeHtml(check.playlistId || '-')}</span></p>
+						<details class="text-xs text-zinc-400"><summary class="cursor-pointer">Raw details (copy this when asking for help)</summary><pre class="mt-2 max-h-72 overflow-auto rounded-lg bg-black/40 p-3 font-mono">${escapeHtml(JSON.stringify(check, null, 2))}</pre></details>
+					</div>`
+				: ''}
+		</section>`;
 }
 
 function renderLobbyControls(isLeader) {

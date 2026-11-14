@@ -56,6 +56,10 @@ export class BaseRuntime {
 		throw this.unsupported('dashboard');
 	}
 
+	matchmakingCheck() {
+		throw this.unsupported('the matchmaking check');
+	}
+
 	async copyMember() {
 		throw this.unsupported('copying a player\'s look');
 	}

@@ -292,6 +292,17 @@ export function registerBotRoutes(ctx) {
 		})
 	);
 
+	// "No match found" diagnostics: build, readiness, crossplay, playlist.
+	app.get(
+		'/api/bots/:botId/matchmaking-check',
+		requireAuth,
+		requireActive,
+		asyncRoute(async (req, res) => {
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
+			return res.json(await adapter.matchmakingCheck());
+		})
+	);
+
 	// Copy a party member's outfit / back bling / pickaxe / kicks (+ BP level, banner).
 	app.post(
 		'/api/bots/:botId/party/members/:memberId/copy',
