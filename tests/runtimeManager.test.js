@@ -203,6 +203,6 @@ describe('RuntimeManager capabilities', () => {
 		const caps = manager.capabilities('user-x');
 		assert.equal(caps.engine, 'fnlb');
 		assert.equal(caps.capabilities.realtimeCosmetics, false, 'FNLB live cosmetics must not be claimed');
-		assert.equal(caps.capabilities.friendMessages, false);
+		assert.equal(caps.capabilities.friendMessages, true, 'DMs go through the fnlb SDK bridge');
 	});
 });

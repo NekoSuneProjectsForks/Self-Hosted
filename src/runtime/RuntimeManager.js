@@ -147,7 +147,7 @@ const OFFLINE_CAPABILITIES = {
 		engine: 'fnlb',
 		capabilities: {
 			friends: true,
-			friendMessages: false,
+			friendMessages: true,
 			friendRequests: true,
 			blockedUsers: true,
 			party: true,
@@ -365,7 +365,11 @@ export class RuntimeManager {
 		};
 
 		if (startConfig.mode === 'fnlb') {
-			return new LegacyFnlbRuntime({ ...shared, onFnlbMatchmaking: (id, event) => this.handleFnlbMatchmaking(id, event) });
+			return new LegacyFnlbRuntime({
+				...shared,
+				onFnlbMatchmaking: (id, event) => this.handleFnlbMatchmaking(id, event),
+				onFriendMessage: (id, message) => this.handleFriendMessage(id, message)
+			});
 		}
 
 		return new LocalFnbrRuntime({

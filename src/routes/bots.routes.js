@@ -179,7 +179,7 @@ export function registerBotRoutes(ctx) {
 			if (!content) throw httpError(400, 'Message content is required.');
 			if (content.length > 2000) throw httpError(400, 'Message is too long.');
 			const adapter = runtime.requireActive(req.user.id, req.params.botId || req.query.botId);
-			return res.status(201).json(await adapter.sendFriendMessage(req.params.friendId, content));
+			return res.status(201).json(await adapter.sendFriendMessage(req.params.friendId, content, req.params.botId));
 		})
 	);
 

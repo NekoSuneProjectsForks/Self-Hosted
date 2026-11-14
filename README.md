@@ -386,6 +386,22 @@ Epic updates stats a few minutes after a match ends. The first check only
 stores a starting point. If the server tracker is off, a member's own running
 local bot reads their stats instead.
 
+### Friends and DMs on the Legacy FNLB engine
+
+The dashboard starts FNLB through the official `fnlb` SDK, so it talks to the
+bots it runs over FNLB's local bridge:
+
+- **DMs (whispers)**: incoming messages arrive through `Events.FriendMessage`
+  and are saved like local-engine DMs. Replies are sent with `bot.whisper()`.
+  The Messages page works on FNLB now. The other player must be the bot's
+  friend.
+- **Friends**: accept, decline, add, remove, block and unblock use the SDK
+  directly when the bot runs on this server, and fall back to FNLB's cloud
+  commands otherwise. Friend lists refresh on friend, request and block events.
+
+DMs need the bot running on this server's FNLB cluster (not only in FNLB's
+cloud): start the cluster and wait for the bot to be ready.
+
 ### FNLB bot lobby queues
 
 With the Legacy FNLB engine, the Matches page also lists every queue FNLB's bot

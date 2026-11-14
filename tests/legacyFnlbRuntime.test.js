@@ -76,10 +76,69 @@ describe('LegacyFnlbRuntime friend requests', () => {
 		assert.equal(caps.capabilities.friendRequests, true);
 	});
 
-	it('still reports friendMessages as unsupported', () => {
-		// No verified FNLB direct-message command exists.
+	it('reports friendMessages as supported (fnlb SDK whisper)', () => {
 		const caps = runtime.getCapabilities();
-		assert.equal(caps.capabilities.friendMessages, false);
+		assert.equal(caps.capabilities.friendMessages, true);
+	});
+});
+
+/** A stand-in for the fnlb SDK client (EventEmitter + bots manager). */
+function fakeManager(bot) {
+	const handlers = {};
+	return {
+		handlers,
+		on: (event, handler) => {
+			handlers[event] = handler;
+		},
+		bots: { cache: new Map(bot ? [[bot.id, bot]] : []), fetch: async (id) => (bot && bot.id === id ? bot : Promise.reject(new Error('not here'))) }
+	};
+}
+
+describe('LegacyFnlbRuntime DMs and friends via the fnlb SDK', () => {
+	it('records incoming whispers from Events.FriendMessage', () => {
+		const runtime = makeRuntime();
+		const received = [];
+		runtime.onFriendMessage = (userId, record) => received.push({ userId, record });
+		const manager = fakeManager();
+		runtime.attachSdkEvents(manager);
+		manager.handlers['friend:message']({ bot: { id: 'bot-1' }, author: { id: 'friend-1', displayName: 'NekoSuneVR' }, content: 'hi bot' });
+		assert.equal(received.length, 1);
+		assert.equal(received[0].userId, 'user-1');
+		assert.equal(received[0].record.direction, 'incoming');
+		assert.equal(received[0].record.friendName, 'NekoSuneVR');
+		assert.equal(received[0].record.content, 'hi bot');
+	});
+
+	it('sends a DM with bot.whisper and records it as outgoing', async () => {
+		const runtime = makeRuntime();
+		const sent = [];
+		const recorded = [];
+		const bot = { id: 'bot-1', whisper: async (to, text) => sent.push([to, text]) };
+		runtime.manager = fakeManager(bot);
+		runtime.onFriendMessage = (_userId, record) => recorded.push(record);
+		const result = await runtime.sendFriendMessage('friend-1', 'hello', 'bot-1');
+		assert.deepEqual(sent, [['friend-1', 'hello']]);
+		assert.equal(recorded[0].direction, 'outgoing');
+		assert.equal(result.source, 'fnlb');
+	});
+
+	it('explains when the bot is not running on this server', async () => {
+		const runtime = makeRuntime();
+		runtime.manager = fakeManager(null);
+		await assert.rejects(() => runtime.sendFriendMessage('friend-1', 'hello', 'bot-x'), /running on this server/);
+	});
+
+	it('uses the local SDK for friend actions when the bot is here, else the cloud command', async () => {
+		const runtime = makeRuntime();
+		const local = [];
+		const bot = { id: 'bot-1', acceptFriend: async (id) => local.push(['accept', id]), block: async (id) => local.push(['block', id]) };
+		runtime.manager = fakeManager(bot);
+		await runtime.acceptFriend('friend-1', 'bot-1');
+		await runtime.blockUser('u1', 'bot-1');
+		assert.deepEqual(local, [['accept', 'friend-1'], ['block', 'u1']]);
+		assert.equal(runtime.calls.length, 0, 'no cloud command needed');
+		await runtime.addFriend('someone', 'other-bot');
+		assert.equal(runtime.calls[0].command, 'add_friend');
 	});
 });
 
@@ -128,8 +187,7 @@ describe('LegacyFnlbRuntime party actions', () => {
 			() => runtime.setPrivacy('public', 'bot-1'),
 			() => runtime.promoteMember('u1', 'bot-1'),
 			() => runtime.setSittingOut(true, 'bot-1'),
-			() => runtime.setSquadFill(true, 'bot-1'),
-			() => runtime.sendFriendMessage('u1', 'hi', 'bot-1')
+			() => runtime.setSquadFill(true, 'bot-1')
 		]) {
 			await assert.rejects(call, (error) => error.status === 501 && error.unsupported === true);
 		}

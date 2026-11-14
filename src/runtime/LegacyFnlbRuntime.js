@@ -55,6 +55,7 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 	constructor(options) {
 		super({ ...options, engine: 'fnlb' });
 		this.onFnlbMatchmaking = options.onFnlbMatchmaking;
+		this.onFriendMessage = options.onFriendMessage;
 		this.manager = null;
 		this.plainConfig = options.plainConfig;
 		this.apiToken = options.plainConfig?.apiToken || '';
@@ -65,9 +66,9 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 			engine: 'fnlb',
 			capabilities: {
 				friends: true,
-				// FNLB exposes friend lists but the dashboard has no verified
-				// endpoint for sending a direct message through it.
-				friendMessages: false,
+				// DMs go through the fnlb SDK's local bridge to the bots this
+				// server runs: Events.FriendMessage in, bot.whisper() out.
+				friendMessages: true,
 				// Accept/decline ride on Epic's add/remove friend semantics via
 				// FNLB's existing add_friend / remove_friend commands.
 				friendRequests: true,
@@ -114,6 +115,7 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 			onSubProcessLogMessage: (message) => this.handleLog(message)
 		});
 
+		this.attachSdkEvents(this.manager);
 		this.log(`Starting legacy FNLB cluster ${this.plainConfig.clusterName}...`, 2);
 		await this.manager.start(this.fnlbStartOptions());
 	}
@@ -128,6 +130,51 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 			categories: categories?.length ? categories : undefined,
 			bots: bots?.length ? bots : undefined
 		};
+	}
+
+	/**
+	 * fnlb SDK events from the bots this process runs (local IPC bridge).
+	 * Event names are the SDK's Events enum values.
+	 */
+	attachSdkEvents(manager) {
+		if (typeof manager?.on !== 'function') return;
+		manager.on('friend:message', (message) => {
+			const record = {
+				botId: message?.bot?.id || null,
+				friendId: message?.author?.id || null,
+				friendName: message?.author?.displayName || null,
+				direction: 'incoming',
+				content: String(message?.content ?? ''),
+				sentAt: new Date().toISOString()
+			};
+			if (!record.botId || !record.friendId) return;
+			this.onFriendMessage?.(this.userId, record);
+		});
+		for (const event of ['friend:request', 'friend:added', 'friend:removed', 'friend:online', 'friend:offline', 'user:blocked', 'user:unblocked']) {
+			manager.on(event, (payload) => this.emit('friends:updated', { botId: payload?.bot?.id || null }));
+		}
+	}
+
+	/** A bot this server's FNLB engine is running (SDK bridge), or null. */
+	async localBot(botId) {
+		const bots = this.manager?.bots;
+		if (!bots || !botId) return null;
+		try {
+			return bots.cache?.get?.(botId) || (await bots.fetch(botId));
+		} catch {
+			return null;
+		}
+	}
+
+	async requireLocalBot(botId, what) {
+		const bot = await this.localBot(botId);
+		if (!bot) {
+			throw runtimeError(
+				409,
+				`${what} needs the bot running on this server's FNLB engine. Start the cluster and wait until the bot is ready.`
+			);
+		}
+		return bot;
 	}
 
 	/** Passes FNLB's log through and picks matchmaking events out of it. */
@@ -182,8 +229,26 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 		return sendFnlbChatMessage(this.requireToken(), botId, { content, locale });
 	}
 
-	async sendFriendMessage() {
-		throw this.unsupported('direct friend messages');
+	/** Whisper (DM) a friend through the fnlb SDK. The recipient must be a friend. */
+	async sendFriendMessage(friendId, content, botId) {
+		const bot = await this.requireLocalBot(botId, 'Sending a DM');
+		const message = String(content ?? '').trim();
+		if (!message) throw runtimeError(400, 'Message content is required.');
+		try {
+			await bot.whisper(friendId, message);
+		} catch (error) {
+			throw runtimeError(error.status || 502, `Could not send the DM: ${error.message}`);
+		}
+		const record = {
+			botId,
+			friendId,
+			friendName: null,
+			direction: 'outgoing',
+			content: message,
+			sentAt: new Date().toISOString()
+		};
+		this.onFriendMessage?.(this.userId, record);
+		return { content: 'Direct message sent.', format: 1, source: 'fnlb', message: record };
 	}
 
 	// ---- friends --------------------------------------------------------
@@ -200,18 +265,29 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 	// So accepting is `add_friend` and declining/cancelling is `remove_friend`.
 	// Both commands are already in FNLB_COMMANDS; no command name is invented.
 
+	/** Runs a friend action on the local bot when it's here, else via FNLB's cloud command. */
+	async friendAction(botId, method, target, command) {
+		const bot = await this.localBot(botId);
+		if (bot && typeof bot[method] === 'function') {
+			await bot[method](target);
+		} else {
+			await this.runCommand(command, target, botId);
+		}
+		this.emit('friends:updated', { botId });
+	}
+
 	async addFriend(target, botId) {
-		await this.runCommand('add_friend', target, botId);
+		await this.friendAction(botId, 'addFriend', target, 'add_friend');
 		return { content: 'Friend request sent.', format: 1, source: 'fnlb' };
 	}
 
 	async acceptFriend(friendId, botId) {
-		await this.runCommand('add_friend', friendId, botId);
+		await this.friendAction(botId, 'acceptFriend', friendId, 'add_friend');
 		return { content: 'Friend request accepted.', format: 1, source: 'fnlb' };
 	}
 
 	async declineFriend(friendId, botId) {
-		await this.runCommand('remove_friend', friendId, botId);
+		await this.friendAction(botId, 'declineFriend', friendId, 'remove_friend');
 		return {
 			content: 'Friend request declined or cancelled.',
 			format: 1,
@@ -220,17 +296,17 @@ export class LegacyFnlbRuntime extends BaseRuntime {
 	}
 
 	async removeFriend(friendId, botId) {
-		await this.runCommand('remove_friend', friendId, botId);
+		await this.friendAction(botId, 'removeFriend', friendId, 'remove_friend');
 		return { content: 'Friend removed.', format: 1, source: 'fnlb' };
 	}
 
 	async blockUser(target, botId) {
-		await this.runCommand('block_user', target, botId);
+		await this.friendAction(botId, 'block', target, 'block_user');
 		return { content: 'User blocked.', format: 1, source: 'fnlb' };
 	}
 
 	async unblockUser(target, botId) {
-		await this.runCommand('unblock_user', target, botId);
+		await this.friendAction(botId, 'unblock', target, 'unblock_user');
 		return { content: 'User unblocked.', format: 1, source: 'fnlb' };
 	}
 
