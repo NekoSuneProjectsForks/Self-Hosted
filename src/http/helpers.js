@@ -6,6 +6,26 @@ export const appVersion = JSON.parse(
 	readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
 ).version;
 
+/** The git commit the server is running (short hash), if it was deployed from a clone. */
+export const appCommit = (() => {
+	try {
+		const gitDir = new URL('../../.git/', import.meta.url);
+		const head = readFileSync(new URL('HEAD', gitDir), 'utf8').trim();
+		if (!head.startsWith('ref: ')) return head.slice(0, 7);
+		const ref = head.slice(5);
+		try {
+			return readFileSync(new URL(ref, gitDir), 'utf8').trim().slice(0, 7);
+		} catch {
+			// Packed refs (e.g. after git gc).
+			const packed = readFileSync(new URL('packed-refs', gitDir), 'utf8');
+			const line = packed.split('\n').find((row) => row.endsWith(` ${ref}`));
+			return line ? line.slice(0, 7) : null;
+		}
+	} catch {
+		return null;
+	}
+})();
+
 export function httpError(status, message) {
 	const error = new Error(message);
 	error.status = status;

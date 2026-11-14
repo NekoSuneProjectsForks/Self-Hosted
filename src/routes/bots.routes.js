@@ -10,7 +10,7 @@ import {
 	getMatchRounds
 } from '../services/matchTracker.js';
 import { getBotSessions } from '../services/sessionHistory.js';
-import { appVersion, asyncRoute, equipCosmetic, httpError } from '../http/helpers.js';
+import { appCommit, appVersion, asyncRoute, equipCosmetic, httpError } from '../http/helpers.js';
 
 export function registerBotRoutes(ctx) {
 	const { app, runtime, requireAuth, requireActive, requireAdmin, io } = ctx;
@@ -34,7 +34,8 @@ export function registerBotRoutes(ctx) {
 				ok: database === 'ok',
 				database,
 				uptime: Math.round(process.uptime()),
-				version: appVersion
+				version: appVersion,
+				commit: appCommit
 			});
 		})
 	);
@@ -299,7 +300,8 @@ export function registerBotRoutes(ctx) {
 		requireActive,
 		asyncRoute(async (req, res) => {
 			const adapter = runtime.requireActive(req.user.id, req.params.botId);
-			return res.json(await adapter.matchmakingCheck());
+			// Version first, so a pasted check shows which code produced it.
+			return res.json({ dashboard: { version: appVersion, commit: appCommit }, ...(await adapter.matchmakingCheck()) });
 		})
 	);
 
