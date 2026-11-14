@@ -8,6 +8,7 @@ import {
 	saveBotAccountIdentity
 } from '../services/botAccounts.js';
 import { cancelDeviceLogin, pollDeviceLogin, startDeviceLogin } from '../services/epicDeviceLogin.js';
+import { updateTrackerSettings } from '../services/serverSettings.js';
 
 /**
  * "Sign in with Epic" (device-code flow). The browser shows Epic's code and
@@ -33,7 +34,9 @@ export function registerEpicLoginRoutes(ctx) {
 		...guard,
 		asyncRoute(async (req, res) => {
 			const target = String(req.body?.target || 'main');
-			if (target !== 'main' && target !== 'new') await getBotAccount(req.user.id, target);
+			if (target === 'server-tracker') {
+				if (req.user.role !== 'admin') throw httpError(403, 'Only admins can sign in the server tracker.');
+			} else if (target !== 'main' && target !== 'new') await getBotAccount(req.user.id, target);
 			return res.status(201).json(await startDeviceLogin(req.user.id, { target, label: req.body?.label }));
 		})
 	);
@@ -47,7 +50,12 @@ export function registerEpicLoginRoutes(ctx) {
 
 			const { deviceAuth, displayName, target, label } = result;
 			const response = { status: 'done', target, displayName };
-			if (target === 'main') {
+			if (target === 'server-tracker') {
+				if (req.user.role !== 'admin') throw httpError(403, 'Only admins can sign in the server tracker.');
+				await updateTrackerSettings({ deviceAuth, displayName });
+				await runtime.stopServerTracker('Server tracker signed in again; restarting.').catch(() => {});
+				await runtime.startServerTracker().catch(() => {});
+			} else if (target === 'main') {
 				await assertNotInUse(req.user.id, deviceAuth.accountId, { forMain: true });
 				await saveDeviceAuthForUser(req.user.id, deviceAuth);
 				runtime.appendLog(req.user.id, `Signed in with Epic as ${displayName || deviceAuth.accountId}. Device auth saved.`, 1);

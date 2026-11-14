@@ -14,6 +14,10 @@ import { BotLog, FriendMessage, pruneLogs } from '../models/index.js';
 import { closeActiveSessions, recordBotSnapshot } from '../services/sessionHistory.js';
 import { closeMatchRound, openMatchRound } from '../services/matchTracker.js';
 import { pollUserPlayers, usersWithTrackedPlayers } from '../services/playerTracker.js';
+import { getTrackerSettings, updateTrackerSettings } from '../services/serverSettings.js';
+import { trackerCategory } from './LocalFnbrRuntime.js';
+
+export const SERVER_TRACKER_ID = 'server-tracker';
 import {
 	clearBotAccountCode,
 	getBotAccount,
@@ -585,8 +589,47 @@ export class RuntimeManager {
 		const helperUsers = [...this.helpers.keys()];
 		await Promise.allSettled([
 			...ids.map((userId) => this.stop(userId, 'Server shutting down.')),
-			...helperUsers.map((userId) => this.stopHelpers(userId))
+			...helperUsers.map((userId) => this.stopHelpers(userId)),
+			this.serverTracker?.adapter ? this.stopServerTracker('Server shutting down.') : null
 		]);
+	}
+
+	/** Admin view: every running bot on the server (main + extra) with its owner. */
+	allRunningBots() {
+		const rows = [];
+		for (const userId of this.runtimes.keys()) {
+			const info = this.serialize(userId);
+			if (!info || info.status === 'offline') continue;
+			const adapter = this.get(userId).adapter;
+			rows.push({
+				userId,
+				kind: 'main',
+				label: 'Main bot',
+				engine: info.activeMode || info.configuredMode || adapter?.engine || null,
+				status: info.status,
+				startedAt: info.startedAt || null,
+				displayName: adapter?.client?.user?.self?.displayName || null,
+				partySize: adapter?.client?.party?.size ?? null
+			});
+		}
+		for (const [userId, map] of this.helpers.entries()) {
+			for (const entry of map.values()) {
+				if (entry.status === 'offline') continue;
+				rows.push({
+					userId,
+					kind: 'extra',
+					accountRowId: entry.id,
+					label: entry.label,
+					engine: 'fnbr',
+					status: entry.status,
+					startedAt: entry.startedAt,
+					tracker: Boolean(entry.adapter?.isTracker?.()),
+					displayName: entry.adapter?.client?.user?.self?.displayName || null,
+					partySize: entry.adapter?.client?.party?.size ?? null
+				});
+			}
+		}
+		return rows;
 	}
 
 	// -------------------------------------------------------------- routing
@@ -1016,14 +1059,128 @@ export class RuntimeManager {
 		const helpers = [...(this.helpers.get(userId)?.values() || [])].filter((entry) => entry.status === 'online' && entry.adapter);
 		const tracker = helpers.find((entry) => entry.adapter.isTracker?.());
 		if (tracker) return tracker.adapter;
+		// The admin's server tracker reads stats for everyone.
+		if (this.serverTracker?.status === 'online' && this.serverTracker.adapter) return this.serverTracker.adapter;
 		return this.localAdapters(userId)[0] || null;
+	}
+
+	// ------------------------------------------------------- server tracker
+
+	trackerState() {
+		this.serverTracker ||= { status: 'offline', adapter: null, lastError: null, startedAt: null, logs: [], lastPollAt: null, lastPollRecorded: 0 };
+		return this.serverTracker;
+	}
+
+	trackerLog(content, format = 1) {
+		const tracker = this.trackerState();
+		tracker.logs.push({ at: new Date().toISOString(), content: String(content), format });
+		if (tracker.logs.length > 100) tracker.logs.shift();
+		this.io?.to?.('admins').emit('server-tracker:updated', this.serializeServerTracker());
+	}
+
+	serializeServerTracker() {
+		const tracker = this.trackerState();
+		return {
+			status: tracker.status,
+			lastError: tracker.lastError,
+			startedAt: tracker.startedAt,
+			lastPollAt: tracker.lastPollAt,
+			lastPollRecorded: tracker.lastPollRecorded,
+			displayName: tracker.adapter?.client?.user?.self?.displayName || null,
+			botId: tracker.status === 'online' ? tracker.adapter?.botId?.() : null,
+			logs: tracker.logs.slice(-50)
+		};
+	}
+
+	/**
+	 * Starts the admin's server tracker: a local fnbr client in tracker mode
+	 * (never joins parties) that reads public stats for every user's Player
+	 * tracking. It is not tied to any user's bots.
+	 */
+	async startServerTracker() {
+		const tracker = this.trackerState();
+		if (['online', 'starting'].includes(tracker.status)) throw runtimeError(409, 'The server tracker is already running.');
+		const settings = await getTrackerSettings();
+		if (!settings.deviceAuth?.accountId && !settings.authorizationCode) {
+			throw runtimeError(400, 'Sign the server tracker in first (Admin → Tracker → Sign in with Epic).');
+		}
+		const startConfig = {
+			mode: 'fnbr',
+			deviceAuth: settings.deviceAuth || null,
+			authorizationCode: settings.deviceAuth ? '' : settings.authorizationCode,
+			platform: settings.platform || 'WIN',
+			defaultStatus: 'Tracking matches',
+			killOtherTokens: false,
+			tracker: true,
+			localCategory: trackerCategory({ config: {} })
+		};
+		tracker.status = 'starting';
+		tracker.lastError = null;
+		this.trackerLog('Starting the server tracker…', 2);
+		const adapter = new LocalFnbrRuntime({
+			userId: SERVER_TRACKER_ID,
+			startConfig,
+			plainConfig: startConfig,
+			appendLog: (_id, content, format) => this.trackerLog(content, format),
+			emit: () => {},
+			onDeviceAuth: (_id, deviceAuth) => updateTrackerSettings({ deviceAuth }).then(() => {}),
+			trustedIds: () => []
+		});
+		tracker.adapter = adapter;
+		try {
+			await adapter.start();
+			tracker.status = 'online';
+			tracker.startedAt = new Date().toISOString();
+			const displayName = adapter.client?.user?.self?.displayName || null;
+			if (displayName && displayName !== settings.displayName) await updateTrackerSettings({ displayName }).catch(() => {});
+			this.trackerLog(`Server tracker online as ${displayName || adapter.botId()}.`, 1);
+		} catch (error) {
+			tracker.adapter = null;
+			tracker.status = error.status === 401 ? 'auth_required' : 'error';
+			tracker.lastError = error.message;
+			if (error.authCodeRejected) await updateTrackerSettings({ authorizationCode: '' }).catch(() => {});
+			this.trackerLog(`Server tracker failed to start: ${error.message}`, 4);
+			throw error;
+		}
+		this.restartTrackingTimer(settings.intervalMinutes);
+		return this.serializeServerTracker();
+	}
+
+	async stopServerTracker(reason = 'Server tracker stopped.') {
+		const tracker = this.trackerState();
+		const adapter = tracker.adapter;
+		tracker.adapter = null;
+		tracker.status = 'offline';
+		tracker.startedAt = null;
+		if (adapter) await adapter.stop().catch(() => {});
+		this.trackerLog(reason, 2);
+		return this.serializeServerTracker();
+	}
+
+	/** Called on server start: brings the tracker up if the admin set auto-start. */
+	async autoStartServerTracker() {
+		const settings = await getTrackerSettings().catch(() => null);
+		if (!settings) return;
+		this.restartTrackingTimer(settings.intervalMinutes);
+		if (settings.autoStart === false || (!settings.deviceAuth?.accountId && !settings.authorizationCode)) return;
+		await this.startServerTracker().catch(() => {});
+	}
+
+	restartTrackingTimer(minutes) {
+		if (this.trackingTimer) clearInterval(this.trackingTimer);
+		this.trackingTimer = null;
+		this.startPlayerTracking(Math.max(1, Number(minutes) || 2) * 60000);
 	}
 
 	/** Reads every tracked player's stats now; records finished matches. */
 	async pollTrackedPlayers(userId) {
 		const source = this.statsSource(userId);
-		if (!source) throw runtimeError(409, 'No bot is running to read stats. Start a tracker bot (Bots → extra bot → Tracker).');
+		if (!source) throw runtimeError(409, 'No bot is running to read stats. Ask an admin to start the server tracker (Admin → Tracker).');
 		const recorded = await pollUserPlayers(userId, (accountId) => source.fetchRawStats(accountId));
+		if (source === this.serverTracker?.adapter) {
+			this.serverTracker.lastPollAt = new Date().toISOString();
+			this.serverTracker.lastPollRecorded = (this.serverTracker.lastPollRecorded || 0) + recorded.length;
+		}
 		for (const round of recorded) {
 			let meta = {};
 			try {

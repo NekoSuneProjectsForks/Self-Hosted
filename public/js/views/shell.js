@@ -143,6 +143,7 @@ export function renderShell() {
 				</header>
 
 				<div class="p-4 sm:p-6 lg:p-8">
+					${announcementBanner()}
 					${restartRequiredBanner()}
 					${authRequiredBanner()}
 					${renderView()}
@@ -166,6 +167,13 @@ export function viewTitle() {
 		admin: 'Admin'
 	};
 	return titles[currentView()] || (usingLocalFnbr() ? 'Dashboard' : 'FNLB Dashboard');
+}
+
+/** The admin's server-wide announcement (Admin → Server). */
+function announcementBanner() {
+	const text = state.serverInfo?.announcement;
+	if (!text) return '';
+	return `<div class="mb-4 flex items-start gap-3 rounded-lg border border-sky-400/30 bg-sky-400/10 p-3 text-sm text-sky-100">${icon('megaphone', 'mt-0.5 h-4 w-4 shrink-0')}<p class="whitespace-pre-line">${escapeHtml(text)}</p></div>`;
 }
 
 export function renderView() {

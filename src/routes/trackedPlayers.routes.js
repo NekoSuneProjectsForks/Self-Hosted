@@ -21,7 +21,12 @@ export function registerTrackedPlayerRoutes(ctx) {
 		return {
 			players: await listTrackedPlayers(userId),
 			source: source
-				? { botId: source.botId(), displayName: source.client?.user?.self?.displayName || null, tracker: Boolean(source.isTracker?.()) }
+				? {
+						botId: source.botId(),
+						displayName: source.client?.user?.self?.displayName || null,
+						tracker: Boolean(source.isTracker?.()),
+						server: source === runtime.serverTracker?.adapter
+					}
 				: null,
 			...(await trackedMatches(userId))
 		};
@@ -40,7 +45,7 @@ export function registerTrackedPlayerRoutes(ctx) {
 			const name = String(req.body?.player || '').trim();
 			if (!name) throw httpError(400, 'Enter an Epic display name or account ID.');
 			const source = runtime.statsSource(req.user.id);
-			if (!source?.client) throw httpError(409, 'Start a bot first (a tracker bot is best): it looks the player up on Epic.');
+			if (!source?.client) throw httpError(409, 'No bot is running to look the player up. Ask an admin to start the server tracker (Admin → Tracker), or start one of your bots.');
 			let user = null;
 			try {
 				user = await source.client.user.fetch(name);

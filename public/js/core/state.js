@@ -48,6 +48,13 @@ export const state = {
 	commandResponses: [],
 	adminUsers: [],
 	adminOverview: null,
+	adminTab: 'overview',
+	adminBots: [],
+	adminTracker: null,
+	adminServer: null,
+	adminSearch: '',
+	adminTempPassword: null,
+	serverInfo: null, // { announcement, registrationOpen }
 	// Live lobby / social state, kept per running bot and refreshed by Socket.IO
 	// events rather than by reloading the whole dashboard.
 	party: null,

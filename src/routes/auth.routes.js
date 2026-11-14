@@ -16,6 +16,7 @@ import {
 	validateAuthInput
 } from '../http/helpers.js';
 
+import { getServerOptions } from '../services/serverSettings.js';
 export function registerAuthRoutes(ctx) {
 	const { app, runtime, requireAuth, requireActive, requireAdmin, io } = ctx;
 
@@ -31,6 +32,15 @@ export function registerAuthRoutes(ctx) {
 		})
 	);
 
+	// Public: shown on the login page and as a banner for everyone.
+	app.get(
+		'/api/server-info',
+		asyncRoute(async (_req, res) => {
+			const options = await getServerOptions();
+			return res.json({ registrationOpen: options.registrationOpen, announcement: options.announcement || '' });
+		})
+	);
+
 	app.post(
 		'/api/auth/register',
 		asyncRoute(async (req, res) => {
@@ -40,6 +50,9 @@ export function registerAuthRoutes(ctx) {
 			validateAuthInput({ username, email, password }, true);
 
 			const firstUser = (await User.count()) === 0;
+			if (!firstUser && !(await getServerOptions()).registrationOpen) {
+				throw httpError(403, 'Registration is closed on this server. Ask an admin for an account.');
+			}
 			const passwordHash = await bcrypt.hash(password, 12);
 
 			const user = await User.create({

@@ -165,7 +165,7 @@ function accountTab(t) {
 				${epicCodeButton('Sign in again', account.id)}
 				<button class="btn-secondary" type="button" data-action="botacc-clear-auth" data-account-id="${id}">${icon('key-round')} Clear login</button>
 				<button class="btn-secondary" type="button" data-action="botacc-toggle-autostart" data-account-id="${id}" data-auto-start="${account.autoStart ? 'false' : 'true'}">${icon(account.autoStart ? 'toggle-right' : 'toggle-left')} Auto-start ${account.autoStart ? 'on' : 'off'}</button>
-				<button class="btn-secondary" type="button" data-action="botacc-toggle-tracker" data-account-id="${id}" data-tracker="${account.tracker ? 'false' : 'true'}" title="A tracker never joins parties. It reads tracked players' stats for the Matches page, so it can run beside a Legacy FNLB bot lobby.">${icon(account.tracker ? 'toggle-right' : 'toggle-left')} Tracker ${account.tracker ? 'on' : 'off'}</button>
+				${account.tracker ? `<button class="btn-secondary" type="button" data-action="botacc-toggle-tracker" data-account-id="${id}" data-tracker="${account.tracker ? 'false' : 'true'}" title="A tracker never joins parties. It reads tracked players' stats for the Matches page, so it can run beside a Legacy FNLB bot lobby.">${icon(account.tracker ? 'toggle-right' : 'toggle-left')} Tracker ${account.tracker ? 'on' : 'off'}</button>` : ''}
 			</div>
 			<form class="grid gap-3" data-form="botacc-update" data-account-id="${id}">
 				<label><span class="label">Label</span><input class="input" name="label" value="${escapeHtml(account.label)}" maxlength="64" /></label>

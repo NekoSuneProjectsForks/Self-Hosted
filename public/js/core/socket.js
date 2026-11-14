@@ -121,6 +121,16 @@ export function connectSocket() {
 		renderIfVisible('matches', 'lobby', 'status');
 	});
 
+	state.socket.on('server-tracker:updated', (runtime) => {
+		if (state.adminTracker) state.adminTracker = { ...state.adminTracker, runtime };
+		renderIfVisible('admin');
+	});
+
+	state.socket.on('server:announcement', ({ announcement }) => {
+		state.serverInfo = { ...(state.serverInfo || {}), announcement: announcement || '' };
+		render();
+	});
+
 	state.socket.on('tracked:updated', () => {
 		if (state.view !== 'matches') return;
 		api('/api/tracked-players')

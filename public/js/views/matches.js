@@ -121,15 +121,17 @@ function trackingPanel() {
 	const totals = tracked.totals || { today: { matches: 0, wins: 0, kills: 0 }, recorded: { matches: 0, wins: 0, kills: 0 } };
 	const source = tracked.source;
 	const sourceLine = source
-		? `Stats read by <span class="text-zinc-300">${escapeHtml(source.displayName || source.botId)}</span>${source.tracker ? ' (tracker)' : ''}.`
-		: '<span class="text-amber-200">No bot is running to read stats.</span> Start an extra bot with <b>Tracker on</b> (Bots → bot → Account).';
+		? `Stats read by <span class="text-zinc-300">${escapeHtml(source.displayName || source.botId)}</span>${source.server ? ' (server tracker)' : source.tracker ? ' (tracker)' : ''}.`
+		: state.user?.role === 'admin'
+			? '<span class="text-amber-200">The server tracker is off.</span> Start it in <b>Admin → Tracker</b>.'
+			: '<span class="text-amber-200">The server tracker is off.</span> Ask an admin to start it.';
 
 	return `
 		<section class="shell-panel rounded-lg p-4">
 			<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 				<div>
 					<h2 class="font-semibold">Player tracking</h2>
-					<p class="mt-1 text-xs text-zinc-500">Records every match from Epic's stats, with any engine. A tracker bot never joins your party, so it can't disturb an FNLB bot lobby. ${sourceLine}</p>
+					<p class="mt-1 text-xs text-zinc-500">Records every match from Epic's stats, with any engine. The server tracker never joins your party, so it can't disturb an FNLB bot lobby. ${sourceLine}</p>
 				</div>
 				<button class="btn-secondary" data-action="tracked-poll">${icon('refresh-cw')} Check now</button>
 			</div>

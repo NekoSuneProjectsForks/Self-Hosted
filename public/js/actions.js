@@ -15,6 +15,7 @@ import {
 	loadMatches,
 	loadTracked,
 	loadMe,
+	loadServerInfo,
 	loadMessages,
 	loadParty,
 	loadQuickCommands,
@@ -37,6 +38,7 @@ export async function refreshAfterAuth() {
 	await Promise.all([
 		loadLogs(),
 		loadQuickCommands(),
+		loadServerInfo(),
 		loadBotAccounts(false).catch(() => {}),
 		api('/api/bot-lobby/settings')
 			.then((data) => {
@@ -647,8 +649,11 @@ document.addEventListener('click', async (event) => {
 			await loadAdmin();
 			render();
 		}
+		if (action && action.startsWith('admin-') && action !== 'admin-refresh') {
+			await handleAdminPanelAction(action, button);
+		}
 		if (adminAction) {
-			await handleAdminAction(adminAction, button.dataset.userId);
+			await handleAdminAction(adminAction, button.dataset.userId, button);
 		}
 	} catch (error) {
 		setToast(error.message, 'error');
@@ -667,6 +672,27 @@ document.addEventListener('submit', async (event) => {
 		state.busy = true;
 
 		// ---- live social / lobby forms (none of these need a restart) ----
+		if (form.dataset.form === 'admin-tracker') {
+			const body = {
+				intervalMinutes: Number(data.intervalMinutes),
+				platform: data.platform,
+				autoStart: data.autoStart === 'on'
+			};
+			if (data.authorizationCode) body.authorizationCode = data.authorizationCode;
+			if (data.deviceAuthJson) body.deviceAuthJson = data.deviceAuthJson;
+			state.adminTracker = await api('/api/admin/tracker', { method: 'PATCH', body });
+			setToast('Tracker settings saved.');
+			render();
+			return;
+		}
+		if (form.dataset.form === 'admin-server') {
+			const result = await api('/api/admin/server', { method: 'PATCH', body: { announcement: data.announcement } });
+			state.adminServer = result.options;
+			state.serverInfo = { ...(state.serverInfo || {}), announcement: result.options.announcement };
+			setToast(result.options.announcement ? 'Announcement published.' : 'Announcement removed.');
+			render();
+			return;
+		}
 		if (form.dataset.form === 'tracked-add') {
 			state.tracked = await api('/api/tracked-players', { method: 'POST', body: { player: data.player } });
 			form.reset();
@@ -1164,8 +1190,81 @@ async function handleBotLobbyForm(form, data) {
 }
 
 
-async function handleAdminAction(action, userId) {
+/** Admin panel actions that are not about one member. */
+async function handleAdminPanelAction(action, button) {
+	const refreshTracker = (data) => {
+		state.adminTracker = data;
+	};
+	if (action === 'admin-tab') {
+		state.adminTab = button.dataset.tab || 'overview';
+		render();
+		return;
+	}
+	if (action === 'admin-temp-dismiss') {
+		state.adminTempPassword = null;
+		render();
+		return;
+	}
+	if (action === 'admin-stop-all') {
+		if (!window.confirm('Stop every member\'s bots now?')) return;
+		const result = await api('/api/admin/stop-all', { method: 'POST', body: {} });
+		setToast(`Stopped ${result.stopped} bot(s).`);
+	}
+	if (action === 'admin-tracker-start') {
+		refreshTracker(await api('/api/admin/tracker/start', { method: 'POST', body: {} }));
+		setToast('Server tracker is online.');
+	}
+	if (action === 'admin-tracker-stop') {
+		refreshTracker(await api('/api/admin/tracker/stop', { method: 'POST', body: {} }));
+		setToast('Server tracker stopped.');
+	}
+	if (action === 'admin-tracker-clear') {
+		if (!window.confirm('Sign the server tracker out? Its saved login is deleted.')) return;
+		refreshTracker(await api('/api/admin/tracker/clear-auth', { method: 'POST', body: {} }));
+		setToast('Server tracker signed out.');
+	}
+	if (action === 'admin-tracker-poll') {
+		const result = await api('/api/admin/tracker/poll', { method: 'POST', body: {} });
+		refreshTracker(result);
+		setToast(result.recorded ? `Recorded ${result.recorded} new match(es).` : 'Checked everyone: no new matches.');
+	}
+	if (action === 'admin-registration') {
+		const result = await api('/api/admin/server', { method: 'PATCH', body: { registrationOpen: button.dataset.open === 'true' } });
+		state.adminServer = result.options;
+		setToast(result.options.registrationOpen ? 'Registration is open.' : 'Registration is closed.');
+	}
+	if (action === 'admin-announcement-clear') {
+		const result = await api('/api/admin/server', { method: 'PATCH', body: { announcement: '' } });
+		state.adminServer = result.options;
+		state.serverInfo = { ...(state.serverInfo || {}), announcement: '' };
+		setToast('Announcement removed.');
+	}
+	await loadAdmin().catch(() => {});
+	render();
+}
+
+async function handleAdminAction(action, userId, button = null) {
 	if (!userId) return;
+	if (action === 'reset-password') {
+		const name = button?.dataset.username || 'this member';
+		if (!window.confirm(`Set a new random password for ${name}? Their old password stops working.`)) return;
+		const result = await api(`/api/admin/users/${userId}/reset-password`, { method: 'POST', body: {} });
+		state.adminTempPassword = { username: name, password: result.password };
+		render();
+		return;
+	}
+	if (action === 'delete') {
+		const name = button?.dataset.username || 'this member';
+		if (window.prompt(`Delete ${name} and all their bots, logins and match history? Type their name to confirm.`) !== name) {
+			setToast('Not deleted: the name did not match.', 'error');
+			return;
+		}
+		await api(`/api/admin/users/${userId}`, { method: 'DELETE', body: {} });
+	}
+	if (action === 'stop-helper') {
+		const rowId = button?.dataset.rowId;
+		await api(`/api/admin/users/${userId}/helpers/${encodeURIComponent(rowId)}/stop`, { method: 'POST', body: {} });
+	}
 	if (action === 'role-admin' || action === 'role-user') {
 		await api(`/api/admin/users/${userId}`, {
 			method: 'PATCH',
@@ -1256,6 +1355,12 @@ function pollEpicLogin() {
 			state.epicCodePrompt = false;
 			await Promise.all([loadMe().catch(() => {}), loadBotAccounts(false).catch(() => {})]);
 			document.querySelector('[data-form="botacc-create"]')?.reset();
+			if (result.target === 'server-tracker') {
+				await loadAdmin().catch(() => {});
+				setToast(`Server tracker signed in${who}. It starts automatically.`);
+				render();
+				return;
+			}
 			setToast(
 				result.target === 'main'
 					? `Signed in${who}. The login is saved, so press Start Cluster.`
@@ -1287,6 +1392,18 @@ try {
 
 // Console text filter: re-render as you type, keeping focus.
 document.addEventListener('input', (event) => {
+	const adminSearch = event.target.closest('[data-admin-search]');
+	if (adminSearch) {
+		state.adminSearch = adminSearch.value;
+		const caret = adminSearch.selectionStart;
+		render();
+		const next = document.querySelector('[data-admin-search]');
+		if (next) {
+			next.focus();
+			next.setSelectionRange(caret, caret);
+		}
+		return;
+	}
 	const bannerQuery = event.target.closest('[data-action="banner-query"]');
 	if (bannerQuery) {
 		state.bannerQuery = bannerQuery.value;

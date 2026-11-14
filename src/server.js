@@ -68,6 +68,7 @@ export async function createServer() {
 	const io = new SocketServer(httpServer);
 	const runtime = new RuntimeManager(io);
 	runtime.startPlayerTracking();
+	runtime.autoStartServerTracker().catch(() => {});
 	const sessionMiddleware = await createSessionMiddleware();
 	const { upload, mediaUpload } = createUploaders();
 
@@ -153,6 +154,7 @@ export async function createServer() {
 
 	io.on('connection', (socket) => {
 		socket.join(userRoom(socket.user.id));
+		if (socket.user.role === 'admin') socket.join('admins');
 		socket.emit('bot:status', runtime.serialize(socket.user.id));
 	});
 

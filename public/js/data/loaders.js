@@ -51,12 +51,27 @@ export async function loadBotDetails(botId, shouldRender = true) {
 
 export async function loadAdmin() {
 	if (state.user?.role !== 'admin') return;
-	const [overview, users] = await Promise.all([
+	const [overview, users, bots, tracker, server] = await Promise.all([
 		api('/api/admin/overview'),
-		api('/api/admin/users')
+		api('/api/admin/users'),
+		api('/api/admin/bots').catch(() => ({ bots: [] })),
+		api('/api/admin/tracker').catch(() => null),
+		api('/api/admin/server').catch(() => null)
 	]);
 	state.adminOverview = overview;
 	state.adminUsers = users.users || [];
+	state.adminBots = bots.bots || [];
+	state.adminTracker = tracker;
+	state.adminServer = server?.options || null;
+}
+
+/** Public server info: the admin's announcement banner and registration state. */
+export async function loadServerInfo() {
+	try {
+		state.serverInfo = await api('/api/server-info');
+	} catch {
+		state.serverInfo = null;
+	}
 }
 
 function activeBotId() {

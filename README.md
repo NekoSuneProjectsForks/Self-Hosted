@@ -369,20 +369,37 @@ uploads or manual entry.
 
 ## Player match tracking (any engine)
 
-**Matches → Player tracking** records every match you play, including FNLB bot
-lobbies, without anything joining your party:
+**Matches → Player tracking** records every match a member plays, including
+FNLB bot lobbies, without anything joining their party:
 
-1. Add an extra bot account (a dummy) and turn **Tracker on** (Bots → bot →
-   Account), then start it. A tracker never accepts invites, never joins a
-   party and never readies, so it can't become a second bot in an FNLB lobby.
-2. On **Matches**, add your Epic name. Your stats must be public (Fortnite →
-   Settings → Account and Privacy → Show on career leaderboard).
-3. Every 2 minutes (or **Check now**) the tracker reads Epic's stats. Each
-   playlist whose match count went up is a finished match: mode, kills, win or
-   best top-N placement, minutes, score and input.
+1. An admin signs in the **server tracker** (Admin → Tracker → Sign in with
+   Epic, using a dummy account) and starts it. It reads stats for every member,
+   never accepts invites, never joins a party and never readies.
+2. On **Matches**, members add their Epic name. Their stats must be public
+   (Fortnite → Settings → Account and Privacy → Show on career leaderboard).
+3. At the tracker's interval (1 to 15 minutes, default 2) or on **Check now**,
+   it reads Epic's stats. Each playlist whose match count went up is a
+   finished match: mode, kills, win or best top-N placement, minutes, score
+   and input.
 
 Epic updates stats a few minutes after a match ends. The first check only
-stores a starting point. Without a tracker, any running local bot reads the stats.
+stores a starting point. If the server tracker is off, a member's own running
+local bot reads their stats instead.
+
+## Admin panel
+
+- **Overview**: members, bots online, tracked players, matches today, server
+  tracker status, dashboard version/commit, uptime, Node, memory, database size.
+- **Members**: search; role; temporary or permanent suspension; per-member bot,
+  tracking and match counts; start/stop; **reset password** (shows a one-time
+  random password); **delete** (stops their bots and removes their data; you
+  type the name to confirm).
+- **Running bots**: every main and extra bot on the server with owner, engine,
+  status and party size; stop one, or **Stop all**.
+- **Tracker**: the server tracker bot: sign in or out, start/stop, start with
+  the server, check interval, platform, check everyone now, live log.
+- **Server**: open or close registration (the first account can always be
+  created), and an announcement banner shown to every member.
 
 ## Engine capabilities
 

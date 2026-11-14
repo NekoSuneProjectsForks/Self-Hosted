@@ -48,6 +48,7 @@ function targetText() {
 	const target = state.epicCodeTarget || 'main';
 	if (target === 'main') return 'your main bot';
 	if (target === 'new') return 'a new extra bot';
+	if (target === 'server-tracker') return 'the server tracker bot (it reads stats for every member and never joins a party)';
 	const account = (state.botAccounts || []).find((row) => row.id === target);
 	return account ? `the extra bot "${escapeHtml(account.label)}"` : 'this bot';
 }
