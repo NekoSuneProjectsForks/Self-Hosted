@@ -933,6 +933,23 @@ describe("copy the leader's mode (42.x lobbies)", () => {
 	}
 });
 
+describe('Not ready on join', () => {
+	it('drops the "Ready" fnbr carries over from the last party', async () => {
+		const client = fakeClient('bot');
+		client.party.me.isReady = true;
+		client.lastPartyMemberMeta = { 'Default:MatchmakingInfo_j': JSON.stringify({ MatchmakingInfo: { readyStatus: 'Ready', x: 1 } }) };
+		const runtime = runtimeFor(client);
+		runtime.defaultsDelayMs = 60000;
+		runtime.checkNewParty();
+		clearTimeout(runtime.defaultsTimer);
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.deepEqual(client.calls.filter((c) => c[0] === 'setReadiness'), [['setReadiness', false]]);
+		const carried = JSON.parse(client.lastPartyMemberMeta['Default:MatchmakingInfo_j']).MatchmakingInfo;
+		assert.equal(carried.readyStatus, 'NotReady');
+		assert.equal(carried.x, 1);
+	});
+});
+
 describe("Follow the leader's queue (experimental)", () => {
 	it('echoes queue progress into its own slot, never the match or session IDs', () => {
 		const leaderGroup = { iD: 'GROUP', schemaId: 2967134841, barrierBits: 268, failReason: '', timedOutBarrierIndex: 4294967295, worldSessionId: 'SESSION', matchmakingDelay: 0, playlistVersion: 0, hiddenMatchmakingDelayMax: 0, state: 1, result: 0 };

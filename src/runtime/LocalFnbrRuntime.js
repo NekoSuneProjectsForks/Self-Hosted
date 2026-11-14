@@ -1122,6 +1122,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 */
 	async joinParty(target) {
 		const client = this.requireClient();
+		this.scrubCarriedReadiness();
 		const value = normalizeTarget(target, 'a party ID or friend');
 		const friend = client.friend.resolve(value);
 		if (friend) {
@@ -1149,6 +1150,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 	async leaveParty() {
 		const client = this.requireClient();
+		this.scrubCarriedReadiness();
 		await client.leaveParty(true);
 		this.emitParty();
 		return { content: 'Left the party and created a fresh lobby.', format: 1, source: 'fnbr' };
@@ -1245,6 +1247,16 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		if (!partyId || !this.client?.isReady || partyId === this.defaultsPartyId) return;
 		this.defaultsPartyId = partyId;
 		this.manualReadiness = false;
+		this.autoReadied = false;
+		this.scrubCarriedReadiness();
+		// fnbr brings the bot's last member state into every new party,
+		// including "Ready" from the previous one, so it showed up ready before
+		// anyone else. Arrive not ready; auto-ready readies it after the players.
+		if (!this.sitOutMode() && safeValue(() => this.client.party.me.isReady, false)) {
+			Promise.resolve(safeValue(() => this.client.party.me.setReadiness(false), null))
+				.then(() => this.log('Joined a new party: not ready until the players are.', 2))
+				.catch((error) => this.log(`Could not unready on join: ${error.message}`, 4));
+		}
 		// Let the join settle before patching our member meta.
 		if (this.defaultsTimer) clearTimeout(this.defaultsTimer);
 		this.defaultsTimer = setTimeout(() => {
@@ -1257,6 +1269,22 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				.catch((error) => this.log(`Could not apply join defaults: ${error.message}`, 4));
 		}, this.defaultsDelayMs ?? 1000);
 		this.defaultsTimer.unref?.();
+	}
+
+	/** Clears "Ready" from the member state fnbr reuses for the next party. */
+	scrubCarriedReadiness() {
+		const carried = this.client?.lastPartyMemberMeta;
+		const key = 'Default:MatchmakingInfo_j';
+		if (!carried?.[key]) return;
+		try {
+			const data = JSON.parse(carried[key]);
+			if (data?.MatchmakingInfo && data.MatchmakingInfo.readyStatus !== 'NotReady') {
+				data.MatchmakingInfo.readyStatus = 'NotReady';
+				this.client.lastPartyMemberMeta = { ...carried, [key]: JSON.stringify(data) };
+			}
+		} catch {
+			// Unparseable: leave fnbr's copy alone.
+		}
 	}
 
 	/**
@@ -1662,7 +1690,9 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			this.readyTimer.unref?.();
 			return;
 		}
-		if (!everyoneReady && botReady && this.autoReadied) this.applyAutoReady(false);
+		// Unready whenever the players aren't all ready, unless someone readied
+		// the bot by hand (dashboard or !ready) in this party.
+		if (!everyoneReady && botReady && (this.autoReadied || !this.manualReadiness)) this.applyAutoReady(false);
 	}
 
 	/**
