@@ -461,7 +461,12 @@ The public page is read-only. It never shows owners, emails or account IDs,
 and it has no controls: friends, DMs, skins and settings stay with the owner.
 Ownership is checked when publishing (a local bot must be your main or extra
 account; an FNLB bot must be on your FNLB token). Bots of suspended members are
-hidden. The list is cached for 20 seconds.
+hidden. The page and the homepage counts update **live** (Server-Sent Events
+from `/api/public/bots/stream`): the server checks every 2 seconds while
+anyone is watching and only sends a message when the list changes, so a bot
+appears or disappears within about 2 to 3 seconds. If a proxy blocks the stream,
+the page falls back to checking every 3 seconds. Behind Nginx, the stream
+sends `X-Accel-Buffering: no`; leave buffering off for that path.
 
 ## Local engine: admins only (for now)
 

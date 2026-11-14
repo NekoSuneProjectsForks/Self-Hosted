@@ -243,4 +243,5 @@ modules plus a 167-line wiring file.
 - [x] Matches v2: bots auto-tracked from their own Epic stats (TrackedPlayer.kind bot), bot selector, K/D / win rate / kills per match / top-10 / avg time, career stats on demand, paged match table and FNLB queues (+summary), tracker anonymous to members, readable FNLB matchmaking errors
 - [x] Duplicate matches fixed (per-account poll lock, reload baseline, dedupe on account+mode+end time, startup cleanup). Match details pop-up (incl. FNLB queue + party). Export HTML report (names masked to 4 letters, no IDs/scripts). Party recorded at FNLB queue start
 - [x] Friends/Messages bot picker: any FNLB bot on the token (or local main/extra bots); other-bot DM notice + unread count in picker
+- [x] /public-lists + homepage counts live via SSE (shared 2s check, push on change, 25s ping, 500 viewer cap, 3s polling fallback); public cache 2s
 - [!] "Bot doesn't see me join" when the bot leads (e.g. it stayed behind after the crash): likely the 42.x bot-as-captain lobby issue (Fortnite-LobbyBot/fnbr.js#11). Workaround: the player leads and invites the bot

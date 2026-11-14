@@ -12,7 +12,9 @@ import { fetchFnlbBots } from './fnlbApi.js';
  */
 
 export const ENGINES = ['fnbr', 'fnlb'];
-const CACHE_MS = 20000;
+// Live status changes fast (someone invites a bot): keep this short. Ban info
+// from FNLB's API is cached separately (2 minutes per owner).
+const CACHE_MS = 2000;
 let publicCache = { at: 0, rows: null };
 
 function httpError(status, message) {
@@ -174,8 +176,8 @@ export function availability(live, account = null, { now = Date.now() } = {}) {
  * offline and banned bots are left out (they come back once free) and only
  * counted. `statusOf(userId, engine, botKey)` is the runtime's live status.
  */
-export async function publicBots(statusOf, { now = Date.now(), fnlbInfo = fnlbBotInfo } = {}) {
-	if (publicCache.rows && now - publicCache.at < CACHE_MS) return publicCache.rows;
+export async function publicBots(statusOf, { now = Date.now(), fnlbInfo = fnlbBotInfo, maxAgeMs = CACHE_MS } = {}) {
+	if (publicCache.rows && now - publicCache.at < maxAgeMs) return publicCache.rows;
 	const rows = (await BotListing.findAll({ where: { isPublic: true } })).filter((row) => ENGINES.includes(row.engine));
 	const owners = await User.findAll({ where: { id: [...new Set(rows.map((row) => row.userId))] }, attributes: ['id', 'status'] });
 	const active = new Set(owners.filter((user) => user.status !== 'suspended').map((user) => user.id));

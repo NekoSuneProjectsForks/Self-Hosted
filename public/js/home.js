@@ -74,7 +74,7 @@ function render() {
 						<div class="card"><p class="text-3xl font-bold">${busy ?? '…'}</p><p class="text-sm text-zinc-400">in use</p></div>
 					</div>
 					<a class="btn-secondary mt-4 w-full" href="/public-lists">${icon('arrow-right')} See the list</a>
-					<p class="mt-2 text-center text-xs text-zinc-600">Updates every 30 seconds</p>
+					<p class="mt-2 text-center text-xs text-zinc-600">Live</p>
 				</div>
 			</section>
 
@@ -139,5 +139,27 @@ async function loadCounts() {
 	if (infoResult.value) info = { ...info, ...infoResult.value };
 	user = sessionResult.value?.user || null;
 	await loadCounts();
-	setInterval(loadCounts, 30000);
+	// Live counts (same stream as /public-lists); fall back to a 3-second check.
+	if (window.EventSource) {
+		const stream = new EventSource('/api/public/bots/stream');
+		let failures = 0;
+		stream.addEventListener('bots', (event) => {
+			failures = 0;
+			try {
+				counts = JSON.parse(event.data).counts;
+				render();
+			} catch {
+				// Next message replaces it.
+			}
+		});
+		stream.onerror = () => {
+			failures += 1;
+			if (failures >= 3) {
+				stream.close();
+				setInterval(loadCounts, 3000);
+			}
+		};
+	} else {
+		setInterval(loadCounts, 3000);
+	}
 })();

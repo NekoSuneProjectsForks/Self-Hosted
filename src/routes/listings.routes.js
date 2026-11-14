@@ -31,7 +31,7 @@ export function registerListingRoutes(ctx) {
 	app.get(
 		'/api/public/bots',
 		asyncRoute(async (_req, res) => {
-			res.set('Cache-Control', 'public, max-age=15');
+			res.set('Cache-Control', 'public, max-age=2');
 			// Only free, running, unbanned bots; busy ones are just counted.
 			const { bots, counts } = await publicBots((userId, engine, botKey) => runtime.publicBotStatus(userId, engine, botKey));
 			return res.json({ bots, counts });
@@ -115,6 +115,76 @@ export function registerListingRoutes(ctx) {
 			});
 		return { bots: rows, categories, fnlbError };
 	}
+
+	/**
+	 * Live public list (Server-Sent Events, no login). One shared check every
+	 * 2 seconds while anyone is watching; clients only get a message when the
+	 * list changes, plus a keep-alive every 25 seconds.
+	 */
+	const watchers = new Set();
+	const MAX_WATCHERS = 500;
+	let lastPayload = '';
+	let ticking = false;
+	let liveTimer = null;
+	let pingTimer = null;
+	const statusOf = (userId, engine, botKey) => runtime.publicBotStatus(userId, engine, botKey);
+
+	const send = (res, payload) => res.write(`event: bots\ndata: ${payload}\n\n`);
+	const tick = async () => {
+		if (ticking) return;
+		ticking = true;
+		try {
+			const payload = JSON.stringify(await publicBots(statusOf, { maxAgeMs: 1500 }));
+			if (payload !== lastPayload) {
+				lastPayload = payload;
+				for (const res of watchers) send(res, payload);
+			}
+		} catch {
+			// Keep the stream alive; the next tick tries again.
+		} finally {
+			ticking = false;
+		}
+	};
+	const startLive = () => {
+		if (liveTimer) return;
+		liveTimer = setInterval(() => tick(), 2000);
+		pingTimer = setInterval(() => {
+			for (const res of watchers) res.write(': ping\n\n');
+		}, 25000);
+		liveTimer.unref?.();
+		pingTimer.unref?.();
+	};
+	const stopLive = () => {
+		clearInterval(liveTimer);
+		clearInterval(pingTimer);
+		liveTimer = null;
+		pingTimer = null;
+		lastPayload = '';
+	};
+
+	app.get('/api/public/bots/stream', async (req, res) => {
+		if (watchers.size >= MAX_WATCHERS) return res.status(503).json({ error: 'Too many viewers right now. Try again soon.' });
+		res.set({
+			'Content-Type': 'text/event-stream',
+			'Cache-Control': 'no-cache, no-transform',
+			Connection: 'keep-alive',
+			// Nginx and similar proxies must not buffer the stream.
+			'X-Accel-Buffering': 'no'
+		});
+		res.flushHeaders?.();
+		res.write('retry: 3000\n\n');
+		watchers.add(res);
+		startLive();
+		try {
+			send(res, lastPayload || JSON.stringify(await publicBots(statusOf, { maxAgeMs: 1500 })));
+		} catch {
+			// The next tick sends it.
+		}
+		req.on('close', () => {
+			watchers.delete(res);
+			if (!watchers.size) stopLive();
+		});
+	});
 
 	app.get('/api/listings', ...guard, asyncRoute(async (req, res) => res.json(await myBots(req.user))));
 

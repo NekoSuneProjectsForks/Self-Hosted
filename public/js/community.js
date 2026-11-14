@@ -47,11 +47,43 @@ function card(bot) {
 		</article>`;
 }
 
-function render() {
+function listHtml() {
 	const q = query.toLowerCase();
 	const bots = data.bots.filter((bot) => !q || bot.displayName.toLowerCase().includes(q));
+	const busy = data.counts?.busy ?? 0;
+	return bots.length
+		? `<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${bots.map(card).join('')}</div>`
+		: `<div class="shell-panel rounded-xl p-8 text-center text-sm text-zinc-500">${data.bots.length ? 'No bots match.' : busy ? 'Every community bot is in use right now. This page updates by itself as soon as one is free.' : 'No community bots are online right now.'}</div>`;
+}
+
+function countsHtml() {
 	const available = data.counts?.available ?? data.bots.length;
 	const busy = data.counts?.busy ?? 0;
+	return `
+		<span class="badge border-fnlb-400/40 bg-fnlb-500/15 text-fnlb-300">${available} available</span>
+		${busy ? `<span class="text-zinc-500">${busy} more in use right now. They show up again when they're free.</span>` : ''}`;
+}
+
+function liveHtml() {
+	return live === 'live'
+		? `<span class="inline-flex items-center gap-1.5 text-xs text-fnlb-300"><span class="h-2 w-2 animate-pulse rounded-full bg-fnlb-400"></span> Live</span>`
+		: live === 'polling'
+			? '<span class="text-xs text-zinc-500">Updating every 3 seconds</span>'
+			: '<span class="text-xs text-zinc-500">Connecting…</span>';
+}
+
+/** Only the parts that change are redrawn, so the search box keeps focus. */
+function update() {
+	const list = root.querySelector('[data-list]');
+	if (!list) return render();
+	list.innerHTML = listHtml();
+	root.querySelector('[data-counts]').innerHTML = countsHtml();
+	root.querySelector('[data-live]').innerHTML = liveHtml();
+	root.querySelector('[data-error]').innerHTML = error ? `<p class="mb-4 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">${esc(error)}</p>` : '';
+	window.lucide?.createIcons?.();
+}
+
+function render() {
 	root.innerHTML = `
 		<div class="mx-auto max-w-6xl p-4 sm:p-8">
 			<header class="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -76,34 +108,67 @@ function render() {
 			</section>
 
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-				<p class="flex flex-wrap items-center gap-3 text-sm">
-					<span class="badge border-fnlb-400/40 bg-fnlb-500/15 text-fnlb-300">${available} available</span>
-					${busy ? `<span class="text-zinc-500">${busy} more in use right now. They show up again when they're free.</span>` : ''}
-				</p>
+				<p class="flex flex-wrap items-center gap-3 text-sm"><span data-counts>${countsHtml()}</span><span data-live>${liveHtml()}</span></p>
 				<input class="input max-w-xs" data-search placeholder="Search bots" value="${esc(query)}" />
 			</div>
 
-			${error ? `<p class="mb-4 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">${esc(error)}</p>` : ''}
-			${
-				bots.length
-					? `<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${bots.map(card).join('')}</div>`
-					: `<div class="shell-panel rounded-xl p-8 text-center text-sm text-zinc-500">${data.bots.length ? 'No bots match.' : busy ? 'Every community bot is in use right now. Check back in a few minutes; this page updates by itself.' : 'No community bots are online right now.'}</div>`
-			}
-			<p class="mt-6 text-center text-xs text-zinc-600">Updates every 30 seconds. Not affiliated with Epic Games.</p>
+			<div data-error></div>
+			<div data-list>${listHtml()}</div>
+			<p class="mt-6 text-center text-xs text-zinc-600">Bots appear and disappear live as they come free or get used. Not affiliated with Epic Games.</p>
 		</div>`;
 	window.lucide?.createIcons?.();
 }
 
-async function load() {
+let live = 'connecting';
+let pollTimer = null;
+
+function apply(next) {
+	data = next;
+	error = '';
+	update();
+}
+
+async function poll() {
 	try {
-		const response = await fetch('/api/public/bots');
+		const response = await fetch('/api/public/bots', { cache: 'no-store' });
 		if (!response.ok) throw new Error(`Could not load bots (${response.status}).`);
-		data = await response.json();
-		error = '';
+		apply(await response.json());
 	} catch (err) {
 		error = err.message;
+		update();
 	}
-	render();
+}
+
+/** Polling fallback when the live stream can't connect (some proxies block it). */
+function startPolling() {
+	if (pollTimer) return;
+	live = 'polling';
+	poll();
+	pollTimer = setInterval(poll, 3000);
+}
+
+function connect() {
+	if (!window.EventSource) return startPolling();
+	const stream = new EventSource('/api/public/bots/stream');
+	let failures = 0;
+	stream.addEventListener('bots', (event) => {
+		failures = 0;
+		live = 'live';
+		try {
+			apply(JSON.parse(event.data));
+		} catch {
+			// Ignore a malformed message; the next one replaces it.
+		}
+	});
+	stream.onerror = () => {
+		failures += 1;
+		if (failures >= 3) {
+			stream.close();
+			startPolling();
+		} else if (live !== 'live') {
+			update();
+		}
+	};
 }
 
 root.addEventListener('click', async (event) => {
@@ -123,12 +188,8 @@ root.addEventListener('input', (event) => {
 	const input = event.target.closest('[data-search]');
 	if (!input) return;
 	query = input.value;
-	const caret = input.selectionStart;
-	render();
-	const next = root.querySelector('[data-search]');
-	next?.focus();
-	next?.setSelectionRange(caret, caret);
+	update();
 });
 
-load();
-setInterval(load, 30000);
+render();
+connect();
