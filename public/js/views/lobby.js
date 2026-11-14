@@ -226,6 +226,9 @@ function renderMatchmakingCheck() {
 								.join('')}</tbody>
 						</table></div>
 						${(check.differences || []).length ? `<p class="text-xs text-zinc-500">${check.differences.length} other field(s) differ between the bot and the leader (in the raw details).</p>` : ''}
+						<p class="text-xs ${(check.matchmakingTimeline || []).length ? 'text-zinc-400' : 'text-amber-300'}">${(check.matchmakingTimeline || []).length
+							? `Captured ${check.matchmakingTimeline.length} matchmaking update(s) from the leader; they're in the raw details.`
+							: 'No matchmaking attempt captured yet: press Play in Fortnite, wait until it fails, then run the check again.'}</p>
 						<details class="text-xs text-zinc-400"><summary class="cursor-pointer">Raw details (copy this when asking for help)</summary><pre class="mt-2 max-h-72 overflow-auto rounded-lg bg-black/40 p-3 font-mono">${escapeHtml(JSON.stringify(check, null, 2))}</pre></details>
 					</div>`
 				: ''}

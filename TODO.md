@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 144/144 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 146/146 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -218,3 +218,5 @@ modules plus a 167-line wiring file.
 - [x] From the user's check output: build matched (59543849), both Ready, but the bot's own `islandSelection` stayed at fnbr's default (Build · Solo · EU, timestamp 0) and its download progress at 0.000000 while the leader was on Zero Build Duo. The bot now copies the leader's mode, download progress and preload flag (`mirrorLeader`, on by default), live and before readying
 - [x] Matchmaking check: per-member mode table, mismatch problems, raw non-cosmetic field diff against the leader; playlist read via fnbr's 42.x `party.playlistId`
 - [!] Confirm in a real queue; if it still fails, the `differences` list in the check is the next thing to read
+- [x] Second check output: modes now match. Remaining diffs: the leader publishes `MatchmakingData1_j`/`MatchmakingData2_j` (42.x groupMemberData barriers) and the bot publishes neither; the bot's `PlatformData` is fnbr's hard-coded MOBILE pool (left as is, FNLB's fork does it on purpose). The bot now mirrors the whole shared MatchmakingInfo plus MatchmakingData1/2 live, and records a matchmaking timeline with failReason
+- [!] Need a check taken *after* pressing Play and failing, with the timeline

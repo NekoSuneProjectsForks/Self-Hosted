@@ -101,6 +101,9 @@ export function islandOf(member) {
 	};
 }
 
+/** Leader member fields the bot copies verbatim (42.x matchmaking progress). */
+const MIRRORED_MATCHMAKING_KEYS = ['Default:MatchmakingData1_j', 'Default:MatchmakingData2_j'];
+
 function sameJson(a, b) {
 	return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
@@ -479,6 +482,11 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		if (members.filter((m) => m.isBot).length > 1) problems.push('More than one of your bots is in the party.');
 		if (leaderRow?.mode?.squadFill && leaderRow.mode.squadFill !== 'NoFill') problems.push(`Team fill is "${leaderRow.mode.squadFill}"; FNLB recommends No Fill.`);
 		for (const m of members) if (m.crossplay && m.crossplay !== 'OptedIn') problems.push(`${m.displayName || m.id} has crossplay ${m.crossplay}.`);
+		const failed = [...(this.mmTimeline || [])].reverse().find((row) => row.failReason);
+		if (failed) problems.push(`Last matchmaking attempt failed: ${failed.failReason} (state ${failed.state}, barrier ${failed.timedOutBarrierIndex}).`);
+		if (leader && me && leader.id !== selfId && raw(leader, 'Default:MatchmakingData1_j') && !raw(me, 'Default:MatchmakingData1_j')) {
+			problems.push('The leader publishes MatchmakingData1 but the bot does not (turn on "Match the leader\'s mode").');
+		}
 
 		// Every non-cosmetic member field that differs between the bot and the leader.
 		const COSMETIC = /Loadout|Cosmetic|Banner|BattlePass|Emote|Variant|Sidekick|Mimosa|AssistedChallenge|Sticker|Jam|Contrail|Pack|Outfit|Pickaxe|Glider|Shoes|Emoji|Spray|Wrap|Character|Avatar|Lobby_Map/i;
@@ -501,6 +509,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			partyId: party?.id || null,
 			playlistId,
 			mirrorLeader: this.mirrorLeaderEnabled(),
+			matchmakingTimeline: this.mmTimeline || [],
 			members,
 			problems,
 			differences
@@ -589,6 +598,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		}
 		client.on('party:member:updated', (member) => {
 			if (member?.id && member.id !== client.user?.self?.id && safeValue(() => client.party?.leader?.id, null) === member.id) {
+				this.recordMatchmaking(member);
 				this.syncFromLeader().catch(() => {});
 			}
 			this.syncReadiness();
@@ -1652,16 +1662,23 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const mine = mineData.MatchmakingInfo || {};
 		const patch = {};
 
-		if (theirs?.islandSelection && (!sameJson(mine.islandSelection, theirs.islandSelection) || (theirs.currentIsland && !sameJson(mine.currentIsland, theirs.currentIsland)))) {
-			patch['Default:MatchmakingInfo_j'] = me.meta.set('Default:MatchmakingInfo_j', {
-				...mineData,
-				MatchmakingInfo: {
-					...mine,
-					islandSelection: theirs.islandSelection,
-					...(theirs.currentIsland ? { currentIsland: theirs.currentIsland } : {}),
-					...(theirs.playlistVersion !== undefined ? { playlistVersion: theirs.playlistVersion } : {})
-				}
-			});
+		// Everything in the leader's MatchmakingInfo except what is genuinely
+		// per-member (this bot's own readiness).
+		if (theirs) {
+			const { readyStatus, readyInputType, readyStatusMMId, ...shared } = theirs;
+			const next = { ...mine, ...shared };
+			if (!sameJson(next, mine)) {
+				patch['Default:MatchmakingInfo_j'] = me.meta.set('Default:MatchmakingInfo_j', { ...mineData, MatchmakingInfo: next });
+			}
+		}
+
+		// 42.x matchmaking progress (groupMemberData barriers / state / result).
+		// Real members publish these during the queue; fnbr never sends them.
+		for (const key of MIRRORED_MATCHMAKING_KEYS) {
+			const value = safeValue(() => leader.meta.schema?.[key], null);
+			if (value && value !== safeValue(() => me.meta.schema?.[key], null)) {
+				patch[key] = me.meta.set(key, value, true);
+			}
 		}
 
 		const theirDownload = safeValue(() => leader.meta.schema?.['Default:DownloadOnDemandProgress_d'], null);
@@ -1680,6 +1697,11 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		}
 
 		if (!Object.keys(patch).length) return false;
+		if (this.mirroring) {
+			// A newer leader update arrived while a patch was in flight: run again after.
+			this.mirrorAgain = true;
+			return false;
+		}
 		this.mirroring = true;
 		try {
 			await me.sendPatch(patch);
@@ -1693,7 +1715,40 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			return false;
 		} finally {
 			this.mirroring = false;
+			if (this.mirrorAgain) {
+				this.mirrorAgain = false;
+				this.syncFromLeader().catch(() => {});
+			}
 		}
+	}
+
+	/**
+	 * Records the leader's matchmaking progress while they queue, so a failed
+	 * attempt can be read back (including Epic's own failReason).
+	 */
+	recordMatchmaking(leader) {
+		const data = safeValue(() => leader.meta.get('Default:MatchmakingData1_j')?.MatchmakingData1?.groupMemberData, null);
+		const info = safeValue(() => leader.meta.get('Default:MatchmakingInfo_j')?.MatchmakingInfo, null);
+		if (!data && !info) return;
+		const entry = {
+			state: data?.state ?? null,
+			result: data?.result ?? info?.result ?? null,
+			barrierBits: data?.barrierBits ?? null,
+			timedOutBarrierIndex: data?.timedOutBarrierIndex ?? null,
+			failReason: data?.failReason || null,
+			groupId: data?.iD || null,
+			ownerStarted: info?.bHasOwnerStartedMM ?? null,
+			leaderReady: info?.readyStatus ?? null,
+			botReady: safeValue(() => this.client.party.me.meta.get('Default:MatchmakingInfo_j')?.MatchmakingInfo?.readyStatus, null),
+			botHasData: Boolean(safeValue(() => this.client.party.me.meta.schema?.['Default:MatchmakingData1_j'], null))
+		};
+		this.mmTimeline ||= [];
+		const last = this.mmTimeline[this.mmTimeline.length - 1];
+		const { at, ...previous } = last || {};
+		if (last && sameJson(previous, entry)) return;
+		this.mmTimeline.push({ at: new Date().toISOString(), ...entry });
+		if (this.mmTimeline.length > 40) this.mmTimeline.shift();
+		if (entry.failReason) this.log(`Matchmaking failed for the party: ${entry.failReason}`, 4);
 	}
 
 	/** A player's match location from the event's NEW value (fnbr emits before storing it). */

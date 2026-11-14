@@ -870,6 +870,36 @@ describe("copy the leader's mode (42.x lobbies)", () => {
 		assert.equal(sent.length, 0);
 	});
 
+	it('copies MatchmakingData1/2 and keeps its own readiness', async () => {
+		const { runtime, me, leader, sent } = lobby();
+		leader.meta.schema['Default:MatchmakingData1_j'] = JSON.stringify({ MatchmakingData1: { groupMemberData: { iD: 'G1', barrierBits: 12, state: 0, failReason: '' } } });
+		const leaderInfo = JSON.parse(leader.meta.schema['Default:MatchmakingInfo_j']);
+		leaderInfo.MatchmakingInfo.readyStatus = 'Ready';
+		leaderInfo.MatchmakingInfo.bHasOwnerStartedMM = true;
+		leader.meta.schema['Default:MatchmakingInfo_j'] = JSON.stringify(leaderInfo);
+		await runtime.syncFromLeader();
+		assert.equal(sent[0]['Default:MatchmakingData1_j'], leader.meta.schema['Default:MatchmakingData1_j']);
+		const mine = JSON.parse(me.meta.schema['Default:MatchmakingInfo_j']).MatchmakingInfo;
+		assert.equal(mine.bHasOwnerStartedMM, true);
+		assert.equal(mine.readyStatus, 'NotReady', "the bot's own ready state is not overwritten");
+	});
+
+	it("records the leader's matchmaking progress and Epic's failReason", async () => {
+		const { runtime, leader } = lobby();
+		const set = (state, failReason) =>
+			(leader.meta.schema['Default:MatchmakingData1_j'] = JSON.stringify({
+				MatchmakingData1: { groupMemberData: { iD: 'G1', state, barrierBits: 12, timedOutBarrierIndex: 2, failReason } }
+			}));
+		set(1, '');
+		runtime.recordMatchmaking(leader);
+		runtime.recordMatchmaking(leader); // unchanged: not recorded twice
+		set(3, 'BarrierTimeout');
+		runtime.recordMatchmaking(leader);
+		assert.equal(runtime.mmTimeline.length, 2);
+		const check = runtime.matchmakingCheck();
+		assert.ok(check.problems.some((text) => /failed: BarrierTimeout/.test(text)));
+	});
+
 	function islandOfFor(member) {
 		return islandOf(member);
 	}
