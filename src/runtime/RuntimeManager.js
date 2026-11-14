@@ -1003,6 +1003,27 @@ export class RuntimeManager {
 		}
 	}
 
+	/** Every running local fnbr bot of the user (main + extra). */
+	localAdapters(userId) {
+		const main = this.get(userId).adapter;
+		const helpers = [...(this.helpers.get(userId)?.values() || [])].map((entry) => (entry.status === 'online' ? entry.adapter : null));
+		return [main?.engine === 'fnbr' && this.get(userId).status === 'online' ? main : null, ...helpers].filter(Boolean);
+	}
+
+	/** Puts every running bot back to the saved join defaults right now. */
+	async reapplyDefaults(userId, localCategory) {
+		const results = [];
+		for (const adapter of this.localAdapters(userId)) {
+			try {
+				const result = await adapter.applyCategory(localCategory.config);
+				results.push({ botId: adapter.botId(), ok: true, applied: result.applied?.length || 0, failed: result.failed || [] });
+			} catch (error) {
+				results.push({ botId: adapter.botId(), ok: false, error: error.message });
+			}
+		}
+		return results;
+	}
+
 	leaveAllHelpers(userId) {
 		return this.forEachOnlineHelper(userId, (entry) => entry.adapter.leaveParty());
 	}

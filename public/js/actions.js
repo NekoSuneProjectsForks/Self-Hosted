@@ -66,6 +66,9 @@ document.addEventListener('click', async (event) => {
 		try {
 			if (view === 'admin') await loadAdmin();
 			if ((view === 'status' || view === 'categories' || view === 'items') && !state.dashboard) await loadDashboard(false);
+			if (view === 'items' && usingLocalFnbr()) {
+				state.botDefaults = await api('/api/bot-defaults').catch(() => null);
+			}
 			if (view === 'lobby') await loadParty(false);
 			if (view === 'botlobby') {
 				await Promise.all([
@@ -355,7 +358,8 @@ document.addEventListener('click', async (event) => {
 				const helper = controlledHelper();
 				const result = await api(`/api/bots/${encodeURIComponent(activeBotId())}/cosmetics`, {
 					method: 'PATCH',
-					body: { slot, itemId, saveDefault: !helper && state.itemsKeep !== false }
+					// Live for this party only; join defaults are saved explicitly.
+					body: { slot, itemId }
 				});
 				setToast(`${helper ? `${helper.label}: ` : ''}${result?.content || 'Equipped.'}`);
 				render();
@@ -406,9 +410,38 @@ document.addEventListener('click', async (event) => {
 			const helper = controlledHelper();
 			const result = await api(`/api/bots/${encodeURIComponent(activeBotId())}/loadout`, {
 				method: 'PATCH',
-				body: { items, saveDefault: !helper && state.itemsKeep !== false }
+				body: { items }
 			});
-			setToast(`${helper ? `${helper.label}: ` : ''}${result.content}${result.savedAsDefault ? ' Saved for next start.' : ''}`, result.failed?.length ? 'error' : 'info');
+			setToast(`${helper ? `${helper.label}: ` : ''}${result.content} This lasts until the bot joins another party.`, result.failed?.length ? 'error' : 'info');
+			render();
+			return;
+		}
+		if (action === 'tray-save-default') {
+			const loadout = Object.fromEntries(Object.entries(state.loadoutTray || {}).map(([slot, item]) => [slot, item.id]));
+			const result = await api('/api/bot-defaults', { method: 'PUT', body: { loadout, applyNow: false } });
+			state.botDefaults = { loadout: result.loadout, profile: result.profile };
+			setToast(result.content);
+			render();
+			return;
+		}
+		if (action === 'defaults-apply') {
+			const result = await api('/api/bot-defaults/apply', { method: 'POST', body: {} });
+			setToast(result.content);
+			render();
+			return;
+		}
+		if (action === 'defaults-clear-slot') {
+			const result = await api('/api/bot-defaults', { method: 'PUT', body: { loadout: { [button.dataset.slot]: '' } } });
+			state.botDefaults = { loadout: result.loadout, profile: result.profile };
+			setToast('Removed from the join defaults.');
+			render();
+			return;
+		}
+		if (action === 'defaults-clear-profile') {
+			const profile = { battlePassLevel: null, battlePassPurchased: null, bannerId: null, bannerColor: null, crowns: null };
+			const result = await api('/api/bot-defaults', { method: 'PUT', body: { profile } });
+			state.botDefaults = { loadout: result.loadout, profile: result.profile };
+			setToast('Profile defaults cleared.');
 			render();
 			return;
 		}
@@ -554,6 +587,30 @@ document.addEventListener('submit', async (event) => {
 			return;
 		}
 
+		if (form.dataset.form === 'profile') {
+			const profile = {
+				battlePassLevel: data.battlePassLevel,
+				battlePassPurchased: data.battlePassPurchased,
+				bannerId: data.bannerId,
+				bannerColor: data.bannerColor,
+				crowns: data.crowns
+			};
+			if (event.submitter?.value === 'default') {
+				// Only send what was filled in, so empty fields keep their saved value.
+				const filled = Object.fromEntries(Object.entries(profile).filter(([, v]) => v !== '' && v !== undefined));
+				if (!Object.keys(filled).length) throw new Error('Fill in at least one field to save.');
+				const result = await api('/api/bot-defaults', { method: 'PUT', body: { profile: filled } });
+				state.botDefaults = { loadout: result.loadout, profile: result.profile };
+				setToast(result.content);
+			} else {
+				const helper = controlledHelper();
+				const result = await api(`/api/bots/${encodeURIComponent(activeBotId())}/profile`, { method: 'PATCH', body: { profile } });
+				setToast(`${helper ? `${helper.label}: ` : ''}${result.content}`, result.failed?.length ? 'error' : 'info');
+			}
+			form.reset();
+			render();
+			return;
+		}
 		if (form.dataset.form === 'botacc-create' || form.dataset.form === 'botacc-update' || form.dataset.form === 'botlobby-join') {
 			await handleBotLobbyForm(form, data);
 			return;
@@ -719,8 +776,6 @@ document.addEventListener('change', (event) => {
 	if (autoRefresh) state.autoRefresh = autoRefresh.checked;
 	const engineSelect = event.target.closest('[data-action="config-engine"]');
 	if (engineSelect) showEngineFields(engineSelect.form, engineSelect.value);
-	const keep = event.target.closest('[data-action="items-keep"]');
-	if (keep) state.itemsKeep = keep.checked;
 	const epicAck = event.target.closest('[data-action="epic-code-ack"]');
 	if (epicAck) {
 		state.epicCodeAck = epicAck.checked;

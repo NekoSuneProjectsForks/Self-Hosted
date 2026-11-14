@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 106/106 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 113/113 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -196,3 +196,5 @@ modules plus a 167-line wiring file.
 - [x] Auto-ready was inverted: fnbr emits `party:member:readiness:updated` before it stores the new state, so the bot read the old value. Now it re-checks on the next tick and on `member:updated`, and readies ~1.5 s after the last player
 - [x] Items page reset the skin: a separate slot dropdown reset to "Start outfit" on every render, so the next item replaced the outfit. The slot now comes from the item type
 - [x] Loadout tray (one item per slot, equip all at once, kept in localStorage) + `PATCH /api/bots/:botId/loadout`; Play/Stop emote
+- [x] Profile: battle pass level/owned, banner, crowns (`setBattlePass`, `setBanner`, `setCosmeticStats`); live or saved as default; `!level`, `!crowns` DMs
+- [x] Join defaults: re-applied whenever the bot's party ID changes (joined, invited, new own party); live edits temporary; privacy only when leader

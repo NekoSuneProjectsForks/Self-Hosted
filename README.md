@@ -152,8 +152,22 @@ closed when it returns to the lobby, so one bot session contains many rounds.
 bot immediately. On the Items page, the slot comes from each item's type, so
 equipping Back Bling never replaces the Outfit. **Add to loadout** collects one
 item per slot, and **Equip loadout** applies them all at once (the emote goes
-last). Emotes have **Play emote** and **Stop emote**. **Keep after restart** also
-saves what you equip as the startup loadout. "Equip Now" and "Save as Startup Loadout" are separate actions:
+last). Emotes have **Play emote** and **Stop emote**.
+
+**Profile** — battle pass level (e.g. 100) and whether the pass is owned, banner
+icon and colour, and crowns (shown with the Crowned emote). **Apply now**
+changes the bot for this party; **Save as join default** keeps it.
+
+**Join defaults** — the look every local bot (main and extra) goes back to
+whenever it lands in a party, whether it joined someone, was invited, or made
+its own fresh party: outfit, back bling, pickaxe, kicks, join emote, battle pass
+level, banner and crowns. Everything changed live (the Items page, Lobby,
+`CID_…` / `!level` DMs) is temporary and lasts only for the current party.
+**Reset bots to defaults now** puts every running bot back immediately. Privacy
+is only applied when the bot leads the party.
+
+API: `GET/PUT /api/bot-defaults`, `POST /api/bot-defaults/apply`,
+`PATCH /api/bots/:botId/profile`, `PATCH /api/bots/:botId/loadout`. "Equip Now" and "Save as Startup Loadout" are separate actions:
 saving a default never forces a restart, and equipping is only reported as
 successful once the runtime confirms it.
 
@@ -197,6 +211,7 @@ Friends can message any local bot (main or extra):
 | `!ready` / `!unready` / `!sitout` | Readiness |
 | `!stopemote` | Clear the emote |
 | `!status <text>` | Presence status |
+| `!level <n>` / `!crowns <n>` | Battle pass level / crowns, for this party |
 | `!stats [name]` | The sender's (or that player's) BR wins, kills, matches and K/D |
 | `!join` / `!leave` | Join the sender's party / leave the party |
 | `!help` | List the commands |

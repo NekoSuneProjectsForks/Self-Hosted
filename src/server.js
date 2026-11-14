@@ -16,6 +16,7 @@ import { registerAdminRoutes } from './routes/admin.routes.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerBotAccountRoutes } from './routes/botAccounts.routes.js';
 import { registerEpicLoginRoutes } from './routes/epicLogin.routes.js';
+import { registerDefaultsRoutes } from './routes/defaults.routes.js';
 import { registerBotRoutes } from './routes/bots.routes.js';
 import { registerConfigRoutes } from './routes/config.routes.js';
 import { registerLegacyRoutes } from './routes/legacy.routes.js';
@@ -128,6 +129,7 @@ export async function createServer() {
 	registerBotRoutes(ctx);
 	registerBotAccountRoutes(ctx);
 	registerEpicLoginRoutes(ctx);
+	registerDefaultsRoutes(ctx);
 	registerLegacyRoutes(ctx);
 	registerUploadRoutes(ctx);
 	registerAdminRoutes(ctx);

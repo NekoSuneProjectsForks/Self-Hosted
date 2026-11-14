@@ -56,6 +56,10 @@ export class BaseRuntime {
 		throw this.unsupported('dashboard');
 	}
 
+	async setProfile() {
+		throw this.unsupported('profile editing');
+	}
+
 	async setLoadout() {
 		throw this.unsupported('loadouts');
 	}

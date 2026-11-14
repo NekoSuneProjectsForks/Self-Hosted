@@ -24,7 +24,7 @@ export const state = {
 	lobbySettings: null,
 	// Items page: slots picked to equip together, and whether equips persist.
 	loadoutTray: {},
-	itemsKeep: true,
+	botDefaults: null, // join defaults: { loadout, profile }
 	itemSearchQuery: '',
 	itemSearchType: '',
 	// "Use a dummy account" warning shown before opening Epic's code page.

@@ -406,3 +406,76 @@ describe('loadout', () => {
 		assert.equal(result.failed[0].slot, 'backpack');
 	});
 });
+
+describe('profile (battle pass, banner, crowns)', () => {
+	async function profileClient() {
+		const client = fakeClient('bot');
+		client.party.me.meta = { battlepass: { bHasPurchasedPass: false, passLevel: 1 } };
+		client.party.me.banner = { bannerIconId: 'BRSeason01', bannerColorId: 'defaultcolor1' };
+		client.party.me.setBattlePass = async (owned, level) => client.calls.push(['setBattlePass', owned, level]);
+		client.party.me.setBanner = async (id, color) => client.calls.push(['setBanner', id, color]);
+		client.party.me.setCosmeticStats = async (crowns, ranked) => client.calls.push(['setCosmeticStats', crowns, ranked]);
+		return client;
+	}
+
+	it('sets battle pass level 100 and keeps ownership unless told', async () => {
+		const client = await profileClient();
+		await runtimeFor(client).setProfile({ battlePassLevel: '100' });
+		assert.deepEqual(client.calls, [['setBattlePass', false, 100]]);
+	});
+
+	it('changes only the banner colour when only that is given', async () => {
+		const client = await profileClient();
+		await runtimeFor(client).setProfile({ bannerColor: 'defaultcolor15' });
+		assert.deepEqual(client.calls, [['setBanner', 'BRSeason01', 'defaultcolor15']]);
+	});
+
+	it('sets crowns', async () => {
+		const client = await profileClient();
+		await runtimeFor(client).setProfile({ crowns: 50 });
+		assert.deepEqual(client.calls, [['setCosmeticStats', 50, 0]]);
+	});
+
+	it('rejects nonsense and empty edits', async () => {
+		const client = await profileClient();
+		await assert.rejects(runtimeFor(client).setProfile({ battlePassLevel: 'abc' }), (error) => error.status === 400);
+		await assert.rejects(runtimeFor(client).setProfile({}), (error) => error.status === 400);
+	});
+});
+
+describe('join defaults', () => {
+	function defaultsRuntime(config) {
+		const client = fakeClient('bot');
+		client.party.me.isLeader = false;
+		client.party.setPrivacy = async () => client.calls.push(['setPrivacy']);
+		client.party.me.setBattlePass = async (owned, level) => client.calls.push(['setBattlePass', owned, level]);
+		client.party.me.meta = {};
+		const runtime = runtimeFor(client, { config });
+		runtime.defaultsDelayMs = 5;
+		runtime.defaultsPartyId = client.party.id;
+		return { client, runtime };
+	}
+	const wait = () => new Promise((resolve) => setTimeout(resolve, 30));
+
+	it('re-applies the default look when the bot lands in a different party', async () => {
+		const { client, runtime } = defaultsRuntime({ startOutfit: [{ id: 'CID_DEFAULT' }], battlePassLevel: 100, battlePassPurchased: true });
+		client.party.id = 'someone-elses-party';
+		runtime.checkNewParty();
+		await wait();
+		assert.deepEqual(client.calls.find((c) => c[0] === 'setOutfit'), ['setOutfit', 'CID_DEFAULT']);
+		assert.deepEqual(client.calls.find((c) => c[0] === 'setBattlePass'), ['setBattlePass', true, 100]);
+	});
+
+	it('leaves live edits alone while the bot stays in the same party', async () => {
+		const { client, runtime } = defaultsRuntime({ startOutfit: [{ id: 'CID_DEFAULT' }] });
+		runtime.checkNewParty();
+		await wait();
+		assert.equal(client.calls.length, 0);
+	});
+
+	it("does not try to set privacy in someone else's party", async () => {
+		const { client, runtime } = defaultsRuntime({ privacy: 'private', startOutfit: [{ id: 'CID_DEFAULT' }] });
+		await runtime.applyCategory(runtime.startConfig.localCategory.config);
+		assert.equal(client.calls.some((c) => c[0] === 'setPrivacy'), false);
+	});
+});

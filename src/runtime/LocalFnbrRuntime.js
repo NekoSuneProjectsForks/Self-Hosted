@@ -43,6 +43,38 @@ function collectionValues(collection) {
 	return Array.from(collection.values ? collection.values() : []);
 }
 
+/** Profile fields shown in the lobby (level, battle pass, banner, crowns). */
+const PROFILE_KEYS = ['battlePassLevel', 'battlePassPurchased', 'bannerId', 'bannerColor', 'crowns'];
+
+function clampInt(value, min, max) {
+	const number = Number.parseInt(value, 10);
+	if (!Number.isFinite(number)) return null;
+	return Math.min(max, Math.max(min, number));
+}
+
+/** Cleans a profile patch; unknown or empty fields are dropped (= no change). */
+export function normalizeProfile(input = {}) {
+	const out = {};
+	if (input.battlePassLevel !== undefined && input.battlePassLevel !== null && input.battlePassLevel !== '') {
+		const level = clampInt(input.battlePassLevel, 1, 10000);
+		if (level === null) throw runtimeError(400, 'Battle pass level must be a number.');
+		out.battlePassLevel = level;
+	}
+	if (input.battlePassPurchased !== undefined && input.battlePassPurchased !== null && input.battlePassPurchased !== '') {
+		out.battlePassPurchased = input.battlePassPurchased === true || input.battlePassPurchased === 'true' || input.battlePassPurchased === 'on';
+	}
+	const bannerId = String(input.bannerId ?? '').trim();
+	const bannerColor = String(input.bannerColor ?? '').trim();
+	if (bannerId) out.bannerId = bannerId.slice(0, 64);
+	if (bannerColor) out.bannerColor = bannerColor.slice(0, 64);
+	if (input.crowns !== undefined && input.crowns !== null && input.crowns !== '') {
+		const crowns = clampInt(input.crowns, 0, 100000);
+		if (crowns === null) throw runtimeError(400, 'Crowns must be a number.');
+		out.crowns = crowns;
+	}
+	return out;
+}
+
 function firstCosmetic(categoryConfig, ...slots) {
 	for (const slot of slots) {
 		const rows = categoryConfig?.[slot];
@@ -291,6 +323,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		this.log(`[Local fnbr] Ready as ${client.user.self?.displayName || client.user.self?.id}`, 1);
 
 		// A failed startup loadout must not take the whole bot down with it.
+		this.defaultsPartyId = client.party?.id || null;
 		await this.applyCategory(this.startConfig.localCategory?.config || {}, false).catch((error) =>
 			this.log(`[Local fnbr] Startup loadout could not be applied: ${error.message}`, 4)
 		);
@@ -319,6 +352,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		if (this.readyTimer) {
 			clearTimeout(this.readyTimer);
 			this.readyTimer = null;
+		}
+		if (this.defaultsTimer) {
+			clearTimeout(this.defaultsTimer);
+			this.defaultsTimer = null;
 		}
 		this.health = { epicAuth: 'disconnected', xmpp: 'disconnected', stomp: 'disconnected', party: 'disconnected' };
 		if (!this.client) return;
@@ -371,6 +408,13 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			client.on(event, () => setImmediate(() => this.syncReadiness()));
 		}
 		client.on('party:member:updated', () => this.syncReadiness());
+
+		// Join defaults: whenever the bot lands in a different party (it joined
+		// someone, was invited, or made its own fresh party), it goes back to the
+		// saved default look. Live edits only last for the current party.
+		for (const event of ['party:updated', 'party:member:joined', 'party:member:updated', 'party:recreated']) {
+			client.on(event, () => this.checkNewParty());
+		}
 
 		client.on('party:member:message', (message) => {
 			this.handlePartyCommand(message).catch((error) => this.log(`Party command failed: ${error.message}`, 4));
@@ -599,6 +643,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			runtimeMode: 'fnbr',
 			presenceStatus: this.startConfig.defaultStatus,
 			platform: this.startConfig.platform || null,
+			profile: this.currentProfile(),
 			friendsCount: client?.friend?.list?.size ?? null,
 			pendingFriendsCount: client?.friend?.pendingList?.size ?? null,
 			blockedUsersCount: client?.user?.blocklist?.size ?? null,
@@ -922,6 +967,81 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 * Applies a saved loadout to the running bot. Never throws on a missing
 	 * party so that startup can proceed; individual item failures are reported.
 	 */
+	checkNewParty() {
+		const partyId = this.client?.party?.id;
+		if (!partyId || !this.client?.isReady || partyId === this.defaultsPartyId) return;
+		this.defaultsPartyId = partyId;
+		// Let the join settle before patching our member meta.
+		if (this.defaultsTimer) clearTimeout(this.defaultsTimer);
+		this.defaultsTimer = setTimeout(() => {
+			this.defaultsTimer = null;
+			if (this.client?.party?.id !== partyId) return;
+			this.applyCategory(this.startConfig.localCategory?.config || {})
+				.then((result) => {
+					if (result?.applied?.length) this.log('Joined a new party: default look applied.', 2);
+				})
+				.catch((error) => this.log(`Could not apply join defaults: ${error.message}`, 4));
+		}, this.defaultsDelayMs ?? 1000);
+		this.defaultsTimer.unref?.();
+	}
+
+	/** Level, battle pass, banner and crowns, applied live to this party only. */
+	async setProfile(input = {}) {
+		const { member } = this.requireMember();
+		const profile = normalizeProfile(input);
+		const applied = [];
+		const failed = [];
+		const attempt = async (key, action) => {
+			try {
+				await action();
+				applied.push(key);
+			} catch (error) {
+				failed.push({ key, error: error.message });
+			}
+		};
+
+		if (profile.battlePassLevel !== undefined || profile.battlePassPurchased !== undefined) {
+			const current = safeValue(() => member.meta?.battlepass, null);
+			const purchased = profile.battlePassPurchased ?? current?.bHasPurchasedPass ?? false;
+			const level = profile.battlePassLevel ?? current?.passLevel ?? 1;
+			await attempt('battlePass', () => member.setBattlePass(purchased, level));
+		}
+		if (profile.bannerId || profile.bannerColor) {
+			const banner = safeValue(() => member.banner, null);
+			const id = profile.bannerId || banner?.bannerIconId || 'BRSeason01';
+			const color = profile.bannerColor || banner?.bannerColorId || 'defaultcolor1';
+			await attempt('banner', () => member.setBanner(id, color));
+		}
+		if (profile.crowns !== undefined) {
+			await attempt('crowns', () => member.setCosmeticStats(profile.crowns, 0));
+		}
+		if (!applied.length && !failed.length) throw runtimeError(400, 'Nothing to change: fill in at least one field.');
+		this.emitParty();
+		return {
+			content: failed.length
+				? `Updated ${applied.join(', ') || 'nothing'}; failed ${failed.map((row) => `${row.key} (${row.error})`).join(', ')}.`
+				: `Updated ${applied.join(', ')} for this party.`,
+			format: failed.length ? 4 : 1,
+			source: 'fnbr',
+			applied,
+			failed,
+			profile: this.currentProfile()
+		};
+	}
+
+	currentProfile() {
+		const member = this.client?.party?.me;
+		if (!member) return null;
+		const bp = safeValue(() => member.meta?.battlepass, null);
+		const banner = safeValue(() => member.banner, null);
+		return {
+			battlePassLevel: bp?.passLevel ?? null,
+			battlePassPurchased: bp?.bHasPurchasedPass ?? null,
+			bannerId: banner?.bannerIconId ?? null,
+			bannerColor: banner?.bannerColorId ?? null
+		};
+	}
+
 	async applyCategory(categoryConfig, emitUpdate = true) {
 		const client = this.requireClient();
 		const member = client.party?.me;
@@ -947,7 +1067,17 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			}
 		}
 
-		if (categoryConfig?.privacy) {
+		// Default profile (level, battle pass, banner, crowns).
+		const profile = {};
+		for (const key of PROFILE_KEYS) if (categoryConfig?.[key] !== undefined && categoryConfig[key] !== null) profile[key] = categoryConfig[key];
+		if (Object.keys(profile).length) {
+			const result = await this.setProfile(profile).catch((error) => ({ failed: [{ key: 'profile', error: error.message }], applied: [] }));
+			for (const key of result.applied || []) applied.push({ slot: key });
+			for (const row of result.failed || []) failed.push({ slot: row.key, error: row.error });
+		}
+
+		// Privacy is the leader's call; in someone else's party just skip it.
+		if (categoryConfig?.privacy && member.isLeader) {
 			await this.setPrivacy(categoryConfig.privacy).catch((error) =>
 				this.log(`Party privacy could not be applied: ${error.message}`, 4)
 			);
@@ -1222,7 +1352,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			case '!help':
 			case '!commands':
 				return reply(
-					'Commands: CID_ / BID_ / Pickaxe_ID_ / EID_ <id>, !ready, !unready, !sitout, !stopemote, !status <text>, !stats [name], !join, !leave'
+					'Commands: CID_ / BID_ / Pickaxe_ID_ / EID_ <id>, !ready, !unready, !sitout, !stopemote, !status <text>, !level <n>, !crowns <n>, !stats [name], !join, !leave'
 				);
 			case '!ready':
 				return attempt(() => this.setReadiness(true), 'Ready!');
@@ -1250,6 +1380,13 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				);
 			case '!leave':
 				return attempt(() => this.leaveParty(), 'Left the party.');
+			case '!level':
+			case '!bp':
+				if (!args) return reply('Usage: !level <number>');
+				return attempt(() => this.setProfile({ battlePassLevel: args, battlePassPurchased: true }), `Battle pass level set to ${args}.`);
+			case '!crowns':
+				if (!args) return reply('Usage: !crowns <number>');
+				return attempt(() => this.setProfile({ crowns: args }), `Crowns set to ${args}.`);
 			default:
 				return undefined;
 		}

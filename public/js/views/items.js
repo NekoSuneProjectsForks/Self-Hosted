@@ -44,12 +44,8 @@ function renderTray() {
 			<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 				<div>
 					<p class="font-semibold">Loadout for ${escapeHtml(targetName())}</p>
-					<p class="mt-1 text-sm text-zinc-500">Add items from the search below. Each one goes in its own slot, so adding Back Bling never replaces the Outfit. Then equip them all at once. <strong>Equip now</strong> on a single item also changes only that slot.</p>
+					<p class="mt-1 text-sm text-zinc-500">Add items from the search below. Each one goes in its own slot, so adding Back Bling never replaces the Outfit. <strong>Equip</strong> changes the bot for this party only. <strong>Save as join default</strong> is the look it goes back to every time it joins or makes a party.</p>
 				</div>
-				<label class="flex items-center gap-2 text-sm text-zinc-300">
-					<input class="h-4 w-4 accent-fnlb-500" type="checkbox" data-action="items-keep" ${state.itemsKeep !== false ? 'checked' : ''} />
-					Keep after restart
-				</label>
 			</div>
 			<div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
 				${LOADOUT_SLOTS.map(([slot, label]) => {
@@ -71,9 +67,77 @@ function renderTray() {
 			</div>
 			<div class="mt-3 flex flex-wrap gap-2">
 				<button class="btn-primary" type="button" data-action="tray-equip" ${chosen.length && online ? '' : 'disabled'}>${icon('shirt')} Equip loadout (${chosen.length})</button>
+				<button class="btn-secondary" type="button" data-action="tray-save-default" ${chosen.length ? '' : 'disabled'}>${icon('save')} Save as join default</button>
 				<button class="btn-secondary" type="button" data-action="tray-clear" ${chosen.length ? '' : 'disabled'}>${icon('trash-2')} Clear</button>
 				<button class="btn-secondary" type="button" data-action="emote-stop" ${online ? '' : 'disabled'}>${icon('square')} Stop emote</button>
 				${online ? '' : '<span class="self-center text-xs text-amber-300">Start the bot to equip.</span>'}
+			</div>
+		</section>`;
+}
+
+function value(v) {
+	return v === null || v === undefined ? '' : escapeHtml(String(v));
+}
+
+/** Battle pass level, banner and crowns: live for this party, or saved as default. */
+function renderProfile() {
+	const live = controlBot()?.profile || {};
+	const defaults = state.botDefaults?.profile || {};
+	const online = controlOnline();
+	return `
+		<form class="shell-panel rounded-lg p-4" data-form="profile">
+			<p class="font-semibold">Profile: battle pass, banner, crowns</p>
+			<p class="mt-1 text-sm text-zinc-500">What players see on the bot in the lobby. Leave a field empty to keep it as it is. ${live.battlePassLevel ? `Now: level ${escapeHtml(String(live.battlePassLevel))}${live.battlePassPurchased ? ', battle pass owned' : ''}${live.bannerId ? `, banner ${escapeHtml(live.bannerId)}` : ''}.` : ''}</p>
+			<div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+				<label><span class="label">Battle pass level</span><input class="input" name="battlePassLevel" type="number" min="1" max="10000" placeholder="${value(defaults.battlePassLevel) || 'e.g. 100'}" /></label>
+				<label><span class="label">Battle pass</span>
+					<select class="input" name="battlePassPurchased">
+						<option value="">No change</option>
+						<option value="true">Owned</option>
+						<option value="false">Not owned</option>
+					</select>
+				</label>
+				<label><span class="label">Banner ID</span><input class="input" name="bannerId" placeholder="${value(defaults.bannerId) || 'e.g. BRSeason01'}" /></label>
+				<label><span class="label">Banner colour</span><input class="input" name="bannerColor" placeholder="${value(defaults.bannerColor) || 'e.g. defaultcolor15'}" /></label>
+				<label><span class="label">Crowns</span><input class="input" name="crowns" type="number" min="0" max="100000" placeholder="${value(defaults.crowns) || 'e.g. 50'}" /></label>
+			</div>
+			<p class="mt-2 text-xs text-zinc-600">Crowns show when the bot uses the Crowned emote (EID_Coronet).</p>
+			<div class="mt-3 flex flex-wrap gap-2">
+				<button class="btn-primary" type="submit" name="mode" value="live" ${online ? '' : 'disabled'}>${icon('zap')} Apply now (this party)</button>
+				<button class="btn-secondary" type="submit" name="mode" value="default">${icon('save')} Save as join default</button>
+			</div>
+		</form>`;
+}
+
+/** What every bot goes back to when it joins or makes a party. */
+function renderDefaults() {
+	const defaults = state.botDefaults;
+	if (!defaults) return '';
+	const slots = LOADOUT_SLOTS.filter(([slot]) => defaults.loadout?.[slot]);
+	const profile = defaults.profile || {};
+	const profileBits = [
+		profile.battlePassLevel ? `Level ${profile.battlePassLevel}` : null,
+		profile.battlePassPurchased === true ? 'Battle pass owned' : profile.battlePassPurchased === false ? 'No battle pass' : null,
+		profile.bannerId ? `Banner ${profile.bannerId}${profile.bannerColor ? ` / ${profile.bannerColor}` : ''}` : null,
+		profile.crowns !== null && profile.crowns !== undefined ? `${profile.crowns} crowns` : null
+	].filter(Boolean);
+	return `
+		<section class="shell-panel rounded-lg p-4">
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<p class="font-semibold">Join defaults</p>
+					<p class="mt-1 text-sm text-zinc-500">Every bot (main and extra) switches to this whenever it joins a party or makes its own. Changes you make live, including DM commands, last only until then.</p>
+				</div>
+				<button class="btn-secondary shrink-0" type="button" data-action="defaults-apply">${icon('rotate-ccw')} Reset bots to defaults now</button>
+			</div>
+			<div class="mt-3 flex flex-wrap gap-2 text-xs">
+				${slots.length || profileBits.length
+					? [
+							...slots.map(([slot, label]) => `<span class="rounded border border-white/10 bg-white/[0.04] px-2 py-1"><span class="text-zinc-500">${label}:</span> <span class="font-mono text-zinc-200">${escapeHtml(defaults.loadout[slot])}</span> <button class="ml-1 text-zinc-500 hover:text-red-300" type="button" data-action="defaults-clear-slot" data-slot="${slot}" title="Remove">×</button></span>`),
+							...profileBits.map((bit) => `<span class="rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-zinc-200">${escapeHtml(bit)}</span>`)
+						].join('')
+					: '<span class="text-zinc-500">Nothing saved yet. The bot keeps whatever it is wearing.</span>'}
+				${profileBits.length ? `<button class="text-zinc-500 underline hover:text-red-300" type="button" data-action="defaults-clear-profile">Clear profile defaults</button>` : ''}
 			</div>
 		</section>`;
 }
@@ -128,7 +192,7 @@ export function renderItems() {
 	const local = usingLocalFnbr() || Boolean(controlledHelper());
 	return `
 		<div class="grid gap-4">
-			${local ? renderTray() : renderFnlbControls()}
+			${local ? renderDefaults() + renderTray() + renderProfile() : renderFnlbControls()}
 			<form class="shell-panel rounded-lg p-4" data-form="item-search">
 				<div class="grid gap-3 md:grid-cols-[1fr_180px_120px]">
 					<input class="input" name="q" placeholder="Search cosmetics, e.g. Renegade Raider, Star Wand" value="${escapeHtml(state.itemSearchQuery || '')}" required />
