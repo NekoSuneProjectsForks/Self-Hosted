@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 146/146 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 148/148 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -220,3 +220,7 @@ modules plus a 167-line wiring file.
 - [!] Confirm in a real queue; if it still fails, the `differences` list in the check is the next thing to read
 - [x] Second check output: modes now match. Remaining diffs: the leader publishes `MatchmakingData1_j`/`MatchmakingData2_j` (42.x groupMemberData barriers) and the bot publishes neither; the bot's `PlatformData` is fnbr's hard-coded MOBILE pool (left as is, FNLB's fork does it on purpose). The bot now mirrors the whole shared MatchmakingInfo plus MatchmakingData1/2 live, and records a matchmaking timeline with failReason
 - [!] Need a check taken *after* pressing Play and failing, with the timeline
+- [x] REVERTED: copying the leader's MatchmakingData1/2 + whole MatchmakingInfo made the bot republish the leader's own queue record (same group ID), and the leader's PS5 Fortnite crashed (CE-108255-1) as the queue started. Only the mode selection is copied now; leftover copies are reset to an empty slot
+- [x] The timeline from that run shows the queue *did* start with the bot in it (owner started, state 1, barriers 268 → 284 → 316, no failReason) before the crash
+- [x] Fallback setting: Leave when the queue starts (off by default), rejoins after
+- [!] "Bot doesn't see me join" when the bot leads (e.g. it stayed behind after the crash): likely the 42.x bot-as-captain lobby issue (Fortnite-LobbyBot/fnbr.js#11). Workaround: the player leads and invites the bot

@@ -293,13 +293,17 @@ fill, region) and loading state (`DownloadOnDemandProgress_d`,
 `LobbyState.hasPreloadedAthena`). A real client copies the leader's; fnbr never
 does when the bot isn't leader, so the bot kept saying "Build · Solo · EU · 0%
 downloaded" while the leader picked e.g. Zero Build Duo. The bot now copies the
-leader's values whenever the leader changes them and right before it readies:
-the whole shared `MatchmakingInfo` (keeping its own ready status) plus
-`MatchmakingData1_j` / `MatchmakingData2_j`, the 42.x matchmaking progress
-(`groupMemberData`: barriers, state, result) that real clients publish while
-the party queues and fnbr never sends. While the leader queues, the bot records
-that progress (including Epic's `failReason`) into a timeline shown by the
-Matchmaking check.
+leader's mode selection whenever the leader changes it and right before it
+readies. It does **not** copy the leader's queue record (`MatchmakingData1/2`,
+`matchmakingId`, `bHasOwnerStartedMM`): an earlier version did, which made two
+members claim the same matchmaking slot and crashed the leader's PS5 Fortnite
+(CE-108255-1) as the queue started. Leftover copies are cleared automatically.
+While the leader queues, the bot records their progress (including Epic's
+`failReason`) into a timeline shown by the Matchmaking check.
+
+**Leave when the queue starts** (off by default) is a fallback: if matchmaking
+still fails with the bot in the party, the bot steps out as soon as the leader
+presses Play, so they queue alone, and rejoins after the match.
 Toggle: **Lobby behaviour → Match the leader's mode**.
 
 **Matchmaking check** (Lobby page) shows what the bot is telling Fortnite: build,

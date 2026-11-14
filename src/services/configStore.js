@@ -20,6 +20,7 @@ const DEFAULT_LOCAL_CATEGORY = {
 		botsSitOut: false,
 		leaveOnMatchStart: true,
 		mirrorLeader: true,
+		leaveWhenQueueStarts: false,
 		rejoinAfterMatch: true,
 		autoReady: true,
 		partyCommands: true,

@@ -101,8 +101,28 @@ export function islandOf(member) {
 	};
 }
 
-/** Leader member fields the bot copies verbatim (42.x matchmaking progress). */
-const MIRRORED_MATCHMAKING_KEYS = ['Default:MatchmakingData1_j', 'Default:MatchmakingData2_j'];
+/**
+ * 42.x per-member queue records. The bot must never publish another member's
+ * copy (see syncFromLeader). EMPTY_* is what a real client's unused slot holds.
+ */
+const MATCHMAKING_DATA_KEYS = ['Default:MatchmakingData1_j', 'Default:MatchmakingData2_j'];
+const EMPTY_GROUP_MEMBER_DATA = {
+	iD: '',
+	schemaId: 0,
+	barrierBits: 0,
+	failReason: '',
+	timedOutBarrierIndex: 4294967295,
+	worldSessionId: '',
+	matchmakingDelay: 0,
+	playlistVersion: 0,
+	hiddenMatchmakingDelayMax: 0,
+	state: 0,
+	result: 0
+};
+const EMPTY_MATCHMAKING_DATA = {
+	'Default:MatchmakingData1_j': JSON.stringify({ MatchmakingData1: { groupMemberData: EMPTY_GROUP_MEMBER_DATA } }),
+	'Default:MatchmakingData2_j': JSON.stringify({ MatchmakingData2: { groupMemberData: EMPTY_GROUP_MEMBER_DATA } })
+};
 
 function sameJson(a, b) {
 	return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -484,8 +504,11 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		for (const m of members) if (m.crossplay && m.crossplay !== 'OptedIn') problems.push(`${m.displayName || m.id} has crossplay ${m.crossplay}.`);
 		const failed = [...(this.mmTimeline || [])].reverse().find((row) => row.failReason);
 		if (failed) problems.push(`Last matchmaking attempt failed: ${failed.failReason} (state ${failed.state}, barrier ${failed.timedOutBarrierIndex}).`);
-		if (leader && me && leader.id !== selfId && raw(leader, 'Default:MatchmakingData1_j') && !raw(me, 'Default:MatchmakingData1_j')) {
-			problems.push('The leader publishes MatchmakingData1 but the bot does not (turn on "Match the leader\'s mode").');
+		if (leader && me && leader.id !== selfId) {
+			for (const key of MATCHMAKING_DATA_KEYS) {
+				const ours = raw(me, key);
+				if (ours && ours === raw(leader, key)) problems.push(`The bot is publishing a copy of the leader's ${key.replace('Default:', '')}. Stop and start the bot to clear it.`);
+			}
 		}
 
 		// Every non-cosmetic member field that differs between the bot and the leader.
@@ -1503,6 +1526,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		return this.startConfig.localCategory?.config?.leaveOnMatchStart !== false;
 	}
 
+	leaveWhenQueueStarts() {
+		return this.startConfig.localCategory?.config?.leaveWhenQueueStarts === true;
+	}
+
 	rejoinAfterMatch() {
 		return this.startConfig.localCategory?.config?.rejoinAfterMatch !== false;
 	}
@@ -1662,22 +1689,27 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const mine = mineData.MatchmakingInfo || {};
 		const patch = {};
 
-		// Everything in the leader's MatchmakingInfo except what is genuinely
-		// per-member (this bot's own readiness).
-		if (theirs) {
-			const { readyStatus, readyInputType, readyStatusMMId, ...shared } = theirs;
-			const next = { ...mine, ...shared };
-			if (!sameJson(next, mine)) {
-				patch['Default:MatchmakingInfo_j'] = me.meta.set('Default:MatchmakingInfo_j', { ...mineData, MatchmakingInfo: next });
-			}
+		// Only the mode selection. Do NOT copy the leader's matchmaking state
+		// (MatchmakingData1/2, matchmakingId, bHasOwnerStartedMM...): that is
+		// the leader's own queue record, and republishing it as the bot's made
+		// two members claim the same matchmaking slot, which crashed the
+		// leader's console (PS5 CE-108255-1) when the queue started.
+		if (theirs?.islandSelection && (!sameJson(mine.islandSelection, theirs.islandSelection) || (theirs.currentIsland && !sameJson(mine.currentIsland?.island, theirs.currentIsland?.island)))) {
+			patch['Default:MatchmakingInfo_j'] = me.meta.set('Default:MatchmakingInfo_j', {
+				...mineData,
+				MatchmakingInfo: {
+					...mine,
+					islandSelection: theirs.islandSelection,
+					...(theirs.currentIsland ? { currentIsland: { ...(mine.currentIsland || {}), island: theirs.currentIsland.island } } : {})
+				}
+			});
 		}
 
-		// 42.x matchmaking progress (groupMemberData barriers / state / result).
-		// Real members publish these during the queue; fnbr never sends them.
-		for (const key of MIRRORED_MATCHMAKING_KEYS) {
-			const value = safeValue(() => leader.meta.schema?.[key], null);
-			if (value && value !== safeValue(() => me.meta.schema?.[key], null)) {
-				patch[key] = me.meta.set(key, value, true);
+		// Clean up the copies an earlier version sent (they persist across parties).
+		for (const key of MATCHMAKING_DATA_KEYS) {
+			const ours = safeValue(() => me.meta.schema?.[key], null);
+			if (ours && ours !== EMPTY_MATCHMAKING_DATA[key] && ours === safeValue(() => leader.meta.schema?.[key], null)) {
+				patch[key] = me.meta.set(key, EMPTY_MATCHMAKING_DATA[key], true);
 			}
 		}
 
@@ -1746,7 +1778,15 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const last = this.mmTimeline[this.mmTimeline.length - 1];
 		const { at, ...previous } = last || {};
 		if (last && sameJson(previous, entry)) return;
+		const queueStarted = entry.ownerStarted === true && last?.ownerStarted !== true;
 		this.mmTimeline.push({ at: new Date().toISOString(), ...entry });
+		if (queueStarted && this.leaveWhenQueueStarts()) {
+			// Fallback: let the player queue on their own, come back afterwards.
+			this.rejoinHostId = leader.id;
+			this.rejoinUntil = Date.now() + 3 * 60 * 60 * 1000;
+			this.log('The leader started matchmaking; leaving so they can queue (Leave when the queue starts is on).', 2);
+			this.leaveParty().catch((error) => this.log(`Could not leave: ${error.message}`, 4));
+		}
 		if (this.mmTimeline.length > 40) this.mmTimeline.shift();
 		if (entry.failReason) this.log(`Matchmaking failed for the party: ${entry.failReason}`, 4);
 	}

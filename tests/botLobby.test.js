@@ -870,18 +870,44 @@ describe("copy the leader's mode (42.x lobbies)", () => {
 		assert.equal(sent.length, 0);
 	});
 
-	it('copies MatchmakingData1/2 and keeps its own readiness', async () => {
+	it("never republishes the leader's MatchmakingData (it crashed the leader's console)", async () => {
 		const { runtime, me, leader, sent } = lobby();
-		leader.meta.schema['Default:MatchmakingData1_j'] = JSON.stringify({ MatchmakingData1: { groupMemberData: { iD: 'G1', barrierBits: 12, state: 0, failReason: '' } } });
+		leader.meta.schema['Default:MatchmakingData1_j'] = JSON.stringify({ MatchmakingData1: { groupMemberData: { iD: 'G1', barrierBits: 268, state: 1 } } });
 		const leaderInfo = JSON.parse(leader.meta.schema['Default:MatchmakingInfo_j']);
-		leaderInfo.MatchmakingInfo.readyStatus = 'Ready';
 		leaderInfo.MatchmakingInfo.bHasOwnerStartedMM = true;
 		leader.meta.schema['Default:MatchmakingInfo_j'] = JSON.stringify(leaderInfo);
 		await runtime.syncFromLeader();
-		assert.equal(sent[0]['Default:MatchmakingData1_j'], leader.meta.schema['Default:MatchmakingData1_j']);
+		assert.equal(sent[0]['Default:MatchmakingData1_j'], undefined);
 		const mine = JSON.parse(me.meta.schema['Default:MatchmakingInfo_j']).MatchmakingInfo;
-		assert.equal(mine.bHasOwnerStartedMM, true);
-		assert.equal(mine.readyStatus, 'NotReady', "the bot's own ready state is not overwritten");
+		assert.equal(mine.bHasOwnerStartedMM, undefined, "the leader's queue state is not copied");
+	});
+
+	it('clears a copy left over from the earlier version', async () => {
+		const { runtime, me, leader, sent } = lobby();
+		const copy = JSON.stringify({ MatchmakingData1: { groupMemberData: { iD: 'G1', barrierBits: 268 } } });
+		leader.meta.schema['Default:MatchmakingData1_j'] = copy;
+		me.meta.schema['Default:MatchmakingData1_j'] = copy;
+		assert.ok(runtime.matchmakingCheck().problems.some((text) => /copy of the leader's MatchmakingData1/.test(text)));
+		await runtime.syncFromLeader();
+		assert.match(sent[0]['Default:MatchmakingData1_j'], /"iD":""/);
+	});
+
+	it('fallback: leaves when the leader starts the queue (only if switched on)', async () => {
+		const { client, leader } = lobby();
+		client.leaveParty = async () => client.calls.push(['leaveParty']);
+		const runtime = runtimeFor(client, { config: { leaveWhenQueueStarts: true } });
+		const info = (started) => {
+			const data = JSON.parse(leader.meta.schema['Default:MatchmakingInfo_j']);
+			data.MatchmakingInfo.bHasOwnerStartedMM = started;
+			leader.meta.schema['Default:MatchmakingInfo_j'] = JSON.stringify(data);
+		};
+		info(false);
+		runtime.recordMatchmaking(leader);
+		info(true);
+		runtime.recordMatchmaking(leader);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		assert.equal(client.calls.filter((c) => c[0] === 'leaveParty').length, 1);
+		assert.equal(runtime.rejoinHostId, 'p1');
 	});
 
 	it("records the leader's matchmaking progress and Epic's failReason", async () => {
