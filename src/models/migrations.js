@@ -14,6 +14,9 @@ export async function ensureBotAccountColumns() {
 	if (!table.platform) {
 		await queryInterface.addColumn('BotAccounts', 'platform', { type: DataTypes.STRING(16), allowNull: true });
 	}
+	if (!table.tracker) {
+		await queryInterface.addColumn('BotAccounts', 'tracker', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false });
+	}
 }
 
 export async function ensureBotConfigColumns() {

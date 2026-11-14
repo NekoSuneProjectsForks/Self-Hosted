@@ -13,6 +13,7 @@ import { runtimeError } from './BaseRuntime.js';
 import { BotLog, FriendMessage, pruneLogs } from '../models/index.js';
 import { closeActiveSessions, recordBotSnapshot } from '../services/sessionHistory.js';
 import { closeMatchRound, openMatchRound } from '../services/matchTracker.js';
+import { pollUserPlayers, usersWithTrackedPlayers } from '../services/playerTracker.js';
 import {
 	clearBotAccountCode,
 	getBotAccount,
@@ -769,6 +770,7 @@ export class RuntimeManager {
 		return {
 			...startConfig,
 			platform: account.platform ? normalizePlatform(account.platform, startConfig.platform) : startConfig.platform,
+			tracker: Boolean(account.tracker),
 			killOtherTokens: false
 		};
 	}
@@ -892,7 +894,7 @@ export class RuntimeManager {
 	/** Runs after the main bot comes online: start auto-start bots and seat them. */
 	async autoStartHelpers(user) {
 		const results = await this.startHelpers(user, { onlyAutoStart: true });
-		for (const result of results.filter((row) => row.ok)) {
+		for (const result of results.filter((row) => row.ok && !this.helperMap(user.id).get(row.id)?.adapter?.isTracker?.())) {
 			await this.joinHelperToMain(user.id, result.id).catch((error) =>
 				this.appendLog(user.id, `[${result.label}] Could not join the main lobby: ${error.message}`, 4)
 			);
@@ -936,6 +938,7 @@ export class RuntimeManager {
 	async joinHelperToMain(userId, accountRowId) {
 		const main = this.requireLocal(userId);
 		const entry = this.requireOnlineHelper(userId, accountRowId);
+		if (entry.adapter?.isTracker?.()) throw runtimeError(409, `${entry.label} is a tracker: it never joins parties.`);
 		const mainClient = main.requireClient();
 		const helperClient = entry.adapter.requireClient();
 		const partyId = mainClient.party?.id;
@@ -968,10 +971,12 @@ export class RuntimeManager {
 		return { content: `${entry.label} joined the main lobby.`, format: 1 };
 	}
 
-	async forEachOnlineHelper(userId, action) {
+	async forEachOnlineHelper(userId, action, { includeTrackers = false } = {}) {
 		const results = [];
 		for (const entry of this.helpers.get(userId)?.values() || []) {
 			if (entry.status !== 'online') continue;
+			// Trackers stay out of parties (see LocalFnbrRuntime TRACKER_OVERRIDES).
+			if (!includeTrackers && entry.adapter?.isTracker?.()) continue;
 			try {
 				results.push({ id: entry.id, label: entry.label, ok: true, ...(await action(entry)) });
 			} catch (error) {
@@ -1001,6 +1006,52 @@ export class RuntimeManager {
 		for (const adapter of [main, ...[...(this.helpers.get(userId)?.values() || [])].map((e) => e.adapter)]) {
 			if (adapter?.engine === 'fnbr') adapter.syncReadiness?.();
 		}
+	}
+
+	/**
+	 * The running bot that reads tracked players' stats: a tracker first, then
+	 * any other running local bot. With the Legacy FNLB engine, add a tracker.
+	 */
+	statsSource(userId) {
+		const helpers = [...(this.helpers.get(userId)?.values() || [])].filter((entry) => entry.status === 'online' && entry.adapter);
+		const tracker = helpers.find((entry) => entry.adapter.isTracker?.());
+		if (tracker) return tracker.adapter;
+		return this.localAdapters(userId)[0] || null;
+	}
+
+	/** Reads every tracked player's stats now; records finished matches. */
+	async pollTrackedPlayers(userId) {
+		const source = this.statsSource(userId);
+		if (!source) throw runtimeError(409, 'No bot is running to read stats. Start a tracker bot (Bots → extra bot → Tracker).');
+		const recorded = await pollUserPlayers(userId, (accountId) => source.fetchRawStats(accountId));
+		for (const round of recorded) {
+			let meta = {};
+			try {
+				meta = JSON.parse(round.metadataJson || '{}');
+			} catch {
+				// ignore
+			}
+			this.appendLog(
+				userId,
+				`Match recorded for ${meta.player || 'a tracked player'}: ${meta.playlistLabel || round.playlistId}${round.win ? ', WIN' : ''}, ${round.kills ?? 0} kill(s).`,
+				2
+			);
+		}
+		this.emitTo(userId, 'tracked:updated', { recorded: recorded.length });
+		return recorded;
+	}
+
+	/** Background poll for every user who tracks players (every 2 minutes). */
+	startPlayerTracking(intervalMs = 120000) {
+		if (this.trackingTimer) return;
+		const tick = async () => {
+			for (const userId of await usersWithTrackedPlayers().catch(() => [])) {
+				if (!this.statsSource(userId)) continue;
+				await this.pollTrackedPlayers(userId).catch((error) => this.appendLog(userId, `Player tracking failed: ${error.message}`, 4));
+			}
+		};
+		this.trackingTimer = setInterval(() => tick().catch(() => {}), intervalMs);
+		this.trackingTimer.unref?.();
 	}
 
 	/** Every running local fnbr bot of the user (main + extra). */

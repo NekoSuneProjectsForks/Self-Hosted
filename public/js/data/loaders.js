@@ -108,6 +108,12 @@ export async function loadMatches(shouldRender = true) {
 	if (shouldRender) render();
 }
 
+/** Player match tracking (any engine): tracked players, recent matches, totals. */
+export async function loadTracked(shouldRender = true) {
+	state.tracked = await api('/api/tracked-players');
+	if (shouldRender) render();
+}
+
 export async function loadMessages(friendId, shouldRender = true) {
 	const botId = activeBotId();
 	if (!botId || !friendId) return;

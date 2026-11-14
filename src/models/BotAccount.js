@@ -44,6 +44,13 @@ BotAccount.init(
 			type: DataTypes.STRING(16),
 			allowNull: true
 		},
+		// Tracker: never joins a party; reads tracked players' stats instead
+		// (safe beside a Legacy FNLB bot lobby).
+		tracker: {
+			type: DataTypes.BOOLEAN,
+			allowNull: false,
+			defaultValue: false
+		},
 		// Start with the main bot and join its lobby automatically.
 		autoStart: {
 			type: DataTypes.BOOLEAN,

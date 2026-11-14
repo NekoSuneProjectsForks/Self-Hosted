@@ -84,6 +84,7 @@ function accountTile(account) {
 		badges: [
 			inMainLobby(account) ? '<span class="chip border-fnlb-400/30 text-fnlb-200">In main lobby</span>' : '',
 			account.autoStart ? '<span class="chip">Auto-start</span>' : '',
+			account.tracker ? '<span class="chip border-sky-400/30 text-sky-200">Tracker</span>' : '',
 			restartHint ? `<span class="chip border-amber-400/30 text-amber-200">Restart to switch to ${escapeHtml(platformLabel(effectivePlatform(account)))}</span>` : '',
 			account.lastError ? `<span class="chip border-red-400/30 text-red-200" title="${escapeHtml(account.lastError)}">Error</span>` : ''
 		],

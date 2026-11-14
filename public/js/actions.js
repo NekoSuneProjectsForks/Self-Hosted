@@ -13,6 +13,7 @@ import {
 	loadFriends,
 	loadLogs,
 	loadMatches,
+	loadTracked,
 	loadMe,
 	loadMessages,
 	loadParty,
@@ -94,7 +95,7 @@ document.addEventListener('click', async (event) => {
 				]);
 			}
 			if (view === 'friends' || view === 'messages') await loadFriends(false);
-			if (view === 'matches') await loadMatches(false);
+			if (view === 'matches') await Promise.allSettled([loadMatches(false), loadTracked(false)]);
 		} catch (error) {
 			setToast(error.message, 'error');
 		}
@@ -286,7 +287,29 @@ document.addEventListener('click', async (event) => {
 			return;
 		}
 		if (action === 'refresh-matches') {
-			await loadMatches();
+			await Promise.allSettled([loadMatches(false), loadTracked(false)]);
+			render();
+			return;
+		}
+		if (action === 'tracked-poll') {
+			const result = await api('/api/tracked-players/poll', { method: 'POST', body: {} });
+			state.tracked = result;
+			setToast(result.recorded ? `Recorded ${result.recorded} new match(es).` : 'Stats checked: no new matches yet. Epic updates stats a few minutes after a match.');
+			render();
+			return;
+		}
+		if (action === 'tracked-remove') {
+			if (!window.confirm('Stop tracking this player? Recorded matches stay.')) return;
+			state.tracked = await api(`/api/tracked-players/${encodeURIComponent(button.dataset.trackedId)}`, { method: 'DELETE', body: {} });
+			render();
+			return;
+		}
+		if (action === 'tracked-toggle') {
+			state.tracked = await api(`/api/tracked-players/${encodeURIComponent(button.dataset.trackedId)}`, {
+				method: 'PATCH',
+				body: { enabled: button.dataset.enabled === 'true' }
+			});
+			render();
 			return;
 		}
 		if (action === 'friend-open-messages') {
@@ -644,6 +667,13 @@ document.addEventListener('submit', async (event) => {
 		state.busy = true;
 
 		// ---- live social / lobby forms (none of these need a restart) ----
+		if (form.dataset.form === 'tracked-add') {
+			state.tracked = await api('/api/tracked-players', { method: 'POST', body: { player: data.player } });
+			form.reset();
+			setToast('Tracking started. Matches show up a few minutes after each game ends.');
+			render();
+			return;
+		}
 		if (form.dataset.form === 'friend-add') {
 			const botId = activeBotId();
 			await api(`/api/bots/${encodeURIComponent(botId)}/friends`, {
@@ -1054,6 +1084,10 @@ async function handleBotLobbyAction(action, button) {
 	}
 	if (action === 'botacc-toggle-autostart') {
 		await api(path, { method: 'PATCH', body: { autoStart: button.dataset.autoStart === 'true' } });
+	}
+	if (action === 'botacc-toggle-tracker') {
+		await api(path, { method: 'PATCH', body: { tracker: button.dataset.tracker === 'true' } });
+		setToast(button.dataset.tracker === 'true' ? 'Tracker on: restart this bot. It will never join parties.' : 'Tracker off: restart this bot to use it in lobbies again.');
 	}
 	if (action === 'botacc-clear-auth') {
 		await api(`${path}/clear-auth`, { method: 'POST', body: {} });

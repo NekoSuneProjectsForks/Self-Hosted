@@ -4,6 +4,7 @@ import { sequelize } from './sequelize.js';
 import { ensureBotAccountColumns, ensureBotConfigColumns } from './migrations.js';
 import { BotLog } from './BotLog.js';
 import './associations.js';
+import './TrackedPlayer.js';
 
 export { sequelize } from './sequelize.js';
 export { BotAccount } from './BotAccount.js';
@@ -17,6 +18,7 @@ export { QuickCommand } from './QuickCommand.js';
 export { ReplayUpload } from './ReplayUpload.js';
 export { SessionMedia } from './SessionMedia.js';
 export { SessionStat } from './SessionStat.js';
+export { TrackedPlayer } from './TrackedPlayer.js';
 export { User } from './User.js';
 
 export async function initDatabase() {

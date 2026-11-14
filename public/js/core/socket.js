@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { render } from './render.js';
 import { isControlled, isHelperBotId } from './selectors.js';
+import { api } from './api.js';
 
 /**
  * Targeted realtime updates. Each event patches just the slice of state it
@@ -118,6 +119,16 @@ export function connectSocket() {
 		state.currentMatch = null;
 		if (round) state.matches = [round, ...state.matches.filter((m) => m.id !== round.id)];
 		renderIfVisible('matches', 'lobby', 'status');
+	});
+
+	state.socket.on('tracked:updated', () => {
+		if (state.view !== 'matches') return;
+		api('/api/tracked-players')
+			.then((data) => {
+				state.tracked = data;
+				renderIfVisible('matches');
+			})
+			.catch(() => {});
 	});
 
 	state.socket.on('match:updated', () => {

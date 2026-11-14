@@ -35,6 +35,7 @@ export function plainAccount(row) {
 		accountId: row.accountId,
 		displayName: row.displayName,
 		autoStart: row.autoStart,
+		tracker: Boolean(row.tracker),
 		// null = use the main bot's platform.
 		platform: row.platform || null,
 		deviceAuth: parseDeviceAuth(row),
@@ -50,6 +51,7 @@ export function sanitizeAccount(account) {
 		accountId: account.accountId,
 		displayName: account.displayName,
 		autoStart: account.autoStart,
+		tracker: Boolean(account.tracker),
 		platform: account.platform,
 		deviceAuthConfigured: Boolean(account.deviceAuth?.accountId),
 		deviceAuthMasked: account.deviceAuth?.accountId ? maskSecret(account.deviceAuth.accountId) : '',
@@ -117,6 +119,7 @@ export async function createBotAccount(userId, payload) {
 		userId,
 		label: cleanLabel(payload.label, `Bot ${count + 2}`),
 		autoStart: Boolean(payload.autoStart),
+		tracker: Boolean(payload.tracker),
 		platform: platformFrom(payload.platform),
 		...auth
 	});
@@ -128,6 +131,7 @@ export async function updateBotAccount(userId, id, payload) {
 	const values = authFromPayload(payload);
 	if (payload.label !== undefined) values.label = cleanLabel(payload.label, row.label);
 	if (payload.autoStart !== undefined) values.autoStart = Boolean(payload.autoStart);
+	if (payload.tracker !== undefined) values.tracker = Boolean(payload.tracker);
 	if (payload.platform !== undefined) values.platform = platformFrom(payload.platform);
 	await row.update(values);
 	return plainAccount(row);

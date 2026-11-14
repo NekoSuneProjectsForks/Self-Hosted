@@ -297,9 +297,28 @@ function matchStateFrom(matchInfo) {
 	return 'lobby';
 }
 
+/**
+ * Tracker bots never take part in a lobby, so they can run beside a Legacy
+ * FNLB bot lobby without becoming a second bot in the party.
+ */
+const TRACKER_OVERRIDES = {
+	acceptInvites: false,
+	autoReady: false,
+	mirrorLeader: false,
+	leaveWhenQueueStarts: false,
+	rejoinAfterMatch: false,
+	partyCommands: false,
+	botsSitOut: false
+};
+
+export function trackerCategory(localCategory = {}) {
+	return { ...localCategory, config: { ...(localCategory?.config || {}), ...TRACKER_OVERRIDES } };
+}
+
 export class LocalFnbrRuntime extends BaseRuntime {
 	constructor(options) {
 		super({ ...options, engine: 'fnbr' });
+		if (this.startConfig?.tracker) this.startConfig.localCategory = trackerCategory(this.startConfig.localCategory);
 		this.client = null;
 		this.disabled = false;
 		this.snapshotTimer = null;
@@ -705,6 +724,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		});
 
 		client.on('party:invite', async (invitation) => {
+			if (this.isTracker()) {
+				this.log(`Ignored a party invite from ${invitation.sender?.displayName || invitation.sender?.id}: this bot is a tracker.`, 2);
+				return;
+			}
 			if (!this.autoAcceptInvites() && !this.isTrusted(invitation.sender?.id)) {
 				this.log(`Party invite from ${invitation.sender?.displayName || invitation.sender?.id} is pending.`, 2);
 				this.emit('party:invite', {
@@ -818,7 +841,18 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 * Live config updates. Everything here takes effect without a restart.
 	 */
 	updateLocalCategory(localCategory) {
-		this.startConfig.localCategory = localCategory;
+		this.startConfig.localCategory = this.startConfig.tracker ? trackerCategory(localCategory) : localCategory;
+	}
+
+	isTracker() {
+		return Boolean(this.startConfig?.tracker);
+	}
+
+	/** Raw Epic stats v2 map for a player (used by player match tracking). */
+	async fetchRawStats(accountId) {
+		const client = this.requireClient();
+		const stats = await client.getBRStats(accountId);
+		return stats?.data?.stats || {};
 	}
 
 	botId() {
@@ -1121,6 +1155,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 * visible (private) it sends a join request the friend accepts in-game.
 	 */
 	async joinParty(target) {
+		if (this.isTracker()) throw runtimeError(409, 'This bot is a tracker: it never joins parties.');
 		const client = this.requireClient();
 		this.scrubCarriedReadiness();
 		const value = normalizeTarget(target, 'a party ID or friend');

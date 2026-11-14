@@ -367,6 +367,23 @@ uploads or manual entry.
 
 ---
 
+## Player match tracking (any engine)
+
+**Matches → Player tracking** records every match you play, including FNLB bot
+lobbies, without anything joining your party:
+
+1. Add an extra bot account (a dummy) and turn **Tracker on** (Bots → bot →
+   Account), then start it. A tracker never accepts invites, never joins a
+   party and never readies, so it can't become a second bot in an FNLB lobby.
+2. On **Matches**, add your Epic name. Your stats must be public (Fortnite →
+   Settings → Account and Privacy → Show on career leaderboard).
+3. Every 2 minutes (or **Check now**) the tracker reads Epic's stats. Each
+   playlist whose match count went up is a finished match: mode, kills, win or
+   best top-N placement, minutes, score and input.
+
+Epic updates stats a few minutes after a match ends. The first check only
+stores a starting point. Without a tracker, any running local bot reads the stats.
+
 ## Engine capabilities
 
 The API reports what the active engine can actually do, and the UI hides or

@@ -60,6 +60,7 @@ export const state = {
 	messages: {},
 	unread: {},
 	matches: [],
+	tracked: null,
 	currentMatch: null,
 	toast: null,
 	busy: false,
