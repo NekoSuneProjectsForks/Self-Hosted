@@ -125,7 +125,7 @@ export function addForm() {
 const SETTING_LABELS = [
 	['autoReady', 'Auto-ready with the players', 'The bot readies last, after every player. Use Duos, Trios or Squads (not Solo) with No Fill, like FNLB.'],
 	['mirrorLeader', "Match the leader's mode", "The bot copies the leader's selected mode (Build / Zero Build, team size, fill, region), like a real client does."],
-	['leaveWhenQueueStarts', 'Leave when the queue starts (fallback)', 'If matchmaking still fails with the bot in it: the bot steps out as soon as the leader presses Play, so they queue alone, and rejoins after.'],
+	['leaveWhenQueueStarts', 'Step out when you ready up (fallback)', "If the party still can't start a match with the bot in it: the bot leaves when the leader readies, so they queue on their own, and rejoins after their match."],
 	['leaveOnMatchStart', 'Leave when the match starts', 'Once the match loads, the bot leaves your party so it is free again.'],
 	['rejoinAfterMatch', 'Rejoin after the match', 'When you are back in a lobby, the bot rejoins your party (if it is joinable).'],
 	['botsSitOut', 'Sit out instead of readying', 'Only for parties that want to play without the bot. Off by default.'],

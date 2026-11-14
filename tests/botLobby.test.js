@@ -877,7 +877,9 @@ describe("copy the leader's mode (42.x lobbies)", () => {
 		leaderInfo.MatchmakingInfo.bHasOwnerStartedMM = true;
 		leader.meta.schema['Default:MatchmakingInfo_j'] = JSON.stringify(leaderInfo);
 		await runtime.syncFromLeader();
-		assert.equal(sent[0]['Default:MatchmakingData1_j'], undefined);
+		// It publishes its own idle slot, never the leader's record.
+		assert.notEqual(sent[0]['Default:MatchmakingData1_j'], leader.meta.schema['Default:MatchmakingData1_j']);
+		assert.match(sent[0]['Default:MatchmakingData1_j'], /"iD":""/);
 		const mine = JSON.parse(me.meta.schema['Default:MatchmakingInfo_j']).MatchmakingInfo;
 		assert.equal(mine.bHasOwnerStartedMM, undefined, "the leader's queue state is not copied");
 	});
@@ -929,4 +931,24 @@ describe("copy the leader's mode (42.x lobbies)", () => {
 	function islandOfFor(member) {
 		return islandOf(member);
 	}
+});
+
+describe('SubGame (which part of Fortnite the member is in)', () => {
+	it("matches the leader's SubGame_u with a direct patch (fnbr hard-codes 1)", async () => {
+		const client = fakeClient('bot');
+		const raw = [];
+		const me = client.party.me;
+		me.id = 'bot';
+		me.meta = { schema: { SubGame_u: '1' }, get: () => ({}), set: (k, v) => (me.meta.schema[k] = String(v)) };
+		me.sendPatch = async () => {};
+		me.doPatch = async (update) => raw.push(update);
+		const leader = { id: 'p1', isLeader: true, meta: { schema: { SubGame_u: '2' }, get: () => ({}) } };
+		client.party.leader = leader;
+		client.party.members = new Map([['bot', me], ['p1', leader]]);
+		const runtime = runtimeFor(client);
+		await runtime.syncSubGame();
+		assert.deepEqual(raw, [{ SubGame_u: '2' }]);
+		await runtime.syncSubGame();
+		assert.equal(raw.length, 1, 'no repeat once it matches');
+	});
 });

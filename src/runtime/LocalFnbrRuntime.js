@@ -119,9 +119,20 @@ const EMPTY_GROUP_MEMBER_DATA = {
 	state: 0,
 	result: 0
 };
+// Same shape rebootpy publishes for a bot by default (an idle, unused slot).
+const EMPTY_ISLAND_SELECTION = {
+	island: JSON.stringify({
+		LinkId: '',
+		Session: { iD: '', joinInfo: { joinability: 'CanNotBeJoinedOrWatched', sessionKey: '' } },
+		MatchmakingSettingsV2: { '/Fortnite.com/Matchmaking:Region': 'EU' }
+	}),
+	timestamp: 0,
+	bUsingGracefulUpgrade: true,
+	matchmakingId: ''
+};
 const EMPTY_MATCHMAKING_DATA = {
-	'Default:MatchmakingData1_j': JSON.stringify({ MatchmakingData1: { groupMemberData: EMPTY_GROUP_MEMBER_DATA } }),
-	'Default:MatchmakingData2_j': JSON.stringify({ MatchmakingData2: { groupMemberData: EMPTY_GROUP_MEMBER_DATA } })
+	'Default:MatchmakingData1_j': JSON.stringify({ MatchmakingData1: { groupMemberData: EMPTY_GROUP_MEMBER_DATA, islandSelection: EMPTY_ISLAND_SELECTION, priority: 1 } }),
+	'Default:MatchmakingData2_j': JSON.stringify({ MatchmakingData2: { groupMemberData: EMPTY_GROUP_MEMBER_DATA, islandSelection: EMPTY_ISLAND_SELECTION, priority: 1 } })
 };
 
 function sameJson(a, b) {
@@ -497,6 +508,9 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			}
 			if (leaderRow.downloadProgress && leaderRow.downloadProgress !== meRow.downloadProgress) problems.push(`Download progress differs: leader ${leaderRow.downloadProgress}, bot ${meRow.downloadProgress}.`);
 		}
+		if (leader && me && leader.id !== selfId && raw(leader, 'SubGame_u') && raw(leader, 'SubGame_u') !== raw(me, 'SubGame_u')) {
+			problems.push(`Sub-game differs: leader ${raw(leader, 'SubGame_u')}, bot ${raw(me, 'SubGame_u')} (the bot fixes this when "Match the leader's mode" is on).`);
+		}
 		const teamSize = leaderRow?.mode?.teamSize;
 		if (teamSize === 'Solo' && members.length > 1) problems.push('Team size is Solo with more than one member.');
 		if (members.filter((m) => m.isBot).length > 1) problems.push('More than one of your bots is in the party.');
@@ -623,6 +637,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			if (member?.id && member.id !== client.user?.self?.id && safeValue(() => client.party?.leader?.id, null) === member.id) {
 				this.recordMatchmaking(member);
 				this.syncFromLeader().catch(() => {});
+				this.syncSubGame().catch(() => {});
 			}
 			this.syncReadiness();
 		});
@@ -1166,7 +1181,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 	async setReadiness(ready, { auto = false } = {}) {
 		const { member } = this.requireMember();
-		if (ready) await this.syncFromLeader().catch(() => false);
+		if (ready) {
+			await this.syncFromLeader().catch(() => false);
+			await this.syncSubGame().catch(() => false);
+		}
 		await member.setReadiness(Boolean(ready));
 		// A manual ready/unready takes over from auto-ready until the humans
 		// change readiness again (and from sit-out until the bot changes party).
@@ -1526,6 +1544,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		return this.startConfig.localCategory?.config?.leaveOnMatchStart !== false;
 	}
 
+	/** Fallback, off by default: step out when the leader readies, rejoin after. */
 	leaveWhenQueueStarts() {
 		return this.startConfig.localCategory?.config?.leaveWhenQueueStarts === true;
 	}
@@ -1627,6 +1646,11 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const party = client?.party;
 		if (!party) return false;
 
+		if (this.leaveWhenQueueStarts() && this.playerLeader()) {
+			// The bot steps out when the leader readies, so readying is pointless.
+			return false;
+		}
+
 		if (!this.isDesignatedBot()) {
 			this.log('Another of your bots is in this party; leaving so the party can matchmake (one bot per party).', 2);
 			party.sendMessage?.('Only one bot can go into a match. I\'ll step out so you can queue.')?.catch?.(() => {});
@@ -1705,10 +1729,11 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			});
 		}
 
-		// Clean up the copies an earlier version sent (they persist across parties).
+		// Publish the bot's own idle slot; also replaces copies an earlier
+		// version sent (they persist across parties).
 		for (const key of MATCHMAKING_DATA_KEYS) {
 			const ours = safeValue(() => me.meta.schema?.[key], null);
-			if (ours && ours !== EMPTY_MATCHMAKING_DATA[key] && ours === safeValue(() => leader.meta.schema?.[key], null)) {
+			if (!ours || (ours !== EMPTY_MATCHMAKING_DATA[key] && ours === safeValue(() => leader.meta.schema?.[key], null))) {
 				patch[key] = me.meta.set(key, EMPTY_MATCHMAKING_DATA[key], true);
 			}
 		}
@@ -1778,17 +1803,56 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const last = this.mmTimeline[this.mmTimeline.length - 1];
 		const { at, ...previous } = last || {};
 		if (last && sameJson(previous, entry)) return;
+		const leaderReadied = entry.leaderReady === 'Ready' && last?.leaderReady !== 'Ready';
 		const queueStarted = entry.ownerStarted === true && last?.ownerStarted !== true;
 		this.mmTimeline.push({ at: new Date().toISOString(), ...entry });
-		if (queueStarted && this.leaveWhenQueueStarts()) {
-			// Fallback: let the player queue on their own, come back afterwards.
+		if ((leaderReadied || queueStarted) && this.leaveWhenQueueStarts() && !this.leavingForQueue) {
+			// Let the player queue on their own; come back once their match is over.
+			this.leavingForQueue = true;
 			this.rejoinHostId = leader.id;
 			this.rejoinUntil = Date.now() + 3 * 60 * 60 * 1000;
-			this.log('The leader started matchmaking; leaving so they can queue (Leave when the queue starts is on).', 2);
-			this.leaveParty().catch((error) => this.log(`Could not leave: ${error.message}`, 4));
+			this.hostWasPlaying = false;
+			this.log('The leader is ready to play; stepping out so they can queue. I\'ll rejoin after their match.', 2);
+			this.client?.party
+				?.sendMessage?.("Have fun! I'll step out so you can queue and rejoin after your match.")
+				?.catch?.(() => {});
+			this.leaveParty()
+				.catch((error) => this.log(`Could not leave: ${error.message}`, 4))
+				.finally(() => {
+					this.leavingForQueue = false;
+				});
 		}
 		if (this.mmTimeline.length > 40) this.mmTimeline.shift();
 		if (entry.failReason) this.log(`Matchmaking failed for the party: ${entry.failReason}`, 4);
+	}
+
+	/**
+	 * SubGame_u says which part of Fortnite a member is in. fnbr hard-codes
+	 * "1" when it joins a party, while a PS5 in Battle Royale publishes "2";
+	 * a member in a different sub-game can stop the leader from starting
+	 * matchmaking. It has no "Default:" prefix, so fnbr's sendPatch filters it
+	 * out: send it with a direct member patch instead.
+	 */
+	async syncSubGame() {
+		if (!this.mirrorLeaderEnabled() || this.subGameSyncing) return false;
+		const me = this.client?.party?.me;
+		const leader = this.playerLeader();
+		if (!me || !leader || typeof me.doPatch !== 'function') return false;
+		const theirs = safeValue(() => leader.meta.schema?.SubGame_u, null);
+		const ours = safeValue(() => me.meta.schema?.SubGame_u, null);
+		if (!theirs || !/^\d+$/.test(theirs) || theirs === ours) return false;
+		this.subGameSyncing = true;
+		try {
+			await me.doPatch({ SubGame_u: theirs });
+			me.meta.set('SubGame_u', theirs, true);
+			this.log(`Matched the leader's sub-game (SubGame ${theirs}).`, 2);
+			return true;
+		} catch (error) {
+			this.log(`Could not match the leader's sub-game: ${error.message}`, 4);
+			return false;
+		} finally {
+			this.subGameSyncing = false;
+		}
 	}
 
 	/** A player's match location from the event's NEW value (fnbr emits before storing it). */
@@ -1801,6 +1865,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const leader = safeValue(() => this.client.party.leader, null);
 		this.rejoinHostId = leader && leader.id !== selfId && !this.isTrusted(leader.id) ? leader.id : member.id;
 		this.rejoinUntil = Date.now() + 3 * 60 * 60 * 1000;
+		this.hostWasPlaying = true;
 		this.leavingForMatch = true;
 		setTimeout(() => {
 			this.log('The match has started; leaving the party so the bot is free for the next game.', 2);
@@ -1820,7 +1885,12 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			this.rejoinHostId = null;
 			return;
 		}
-		if (after.isPlaying || this.rejoining) return;
+		if (after.isPlaying) {
+			this.hostWasPlaying = true;
+			return;
+		}
+		// Not back yet: they haven't been in a match since the bot stepped out.
+		if (!this.hostWasPlaying || this.rejoining) return;
 		const partyId = safeValue(() => friend.party?.id, null);
 		if (!partyId || partyId === this.client?.party?.id) return;
 		this.rejoining = true;
@@ -1829,6 +1899,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			.then(() => {
 				this.log(`Back with ${friend.displayName || 'the player'} after their match.`, 1);
 				this.rejoinHostId = null;
+				this.hostWasPlaying = false;
 				this.emitParty();
 			})
 			.catch((error) => this.log(`Could not rejoin after the match (invite the bot instead): ${error.message}`, 3))

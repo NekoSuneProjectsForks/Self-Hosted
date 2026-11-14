@@ -223,4 +223,7 @@ modules plus a 167-line wiring file.
 - [x] REVERTED: copying the leader's MatchmakingData1/2 + whole MatchmakingInfo made the bot republish the leader's own queue record (same group ID), and the leader's PS5 Fortnite crashed (CE-108255-1) as the queue started. Only the mode selection is copied now; leftover copies are reset to an empty slot
 - [x] The timeline from that run shows the queue *did* start with the bot in it (owner started, state 1, barriers 268 → 284 → 316, no failReason) before the crash
 - [x] Fallback setting: Leave when the queue starts (off by default), rejoins after
+- [x] Check on 7e161c0: leader readied (barriers 268) but `bHasOwnerStartedMM` stayed false. Differences: bot had no MatchmakingData at all, `SubGame_u` leader 2 vs bot 1. Bot now publishes its own empty rebootpy-style slot and mirrors `SubGame_u` (direct patch); check flags a sub-game mismatch
+- [!] Need a check after pulling this, with step-out off, to see whether the owner start now goes through
+- [x] Step-out fallback now triggers on leader ready too, and only rejoins after the host was actually in a match
 - [!] "Bot doesn't see me join" when the bot leads (e.g. it stayed behind after the crash): likely the 42.x bot-as-captain lobby issue (Fortnite-LobbyBot/fnbr.js#11). Workaround: the player leads and invites the bot

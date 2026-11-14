@@ -301,9 +301,16 @@ members claim the same matchmaking slot and crashed the leader's PS5 Fortnite
 While the leader queues, the bot records their progress (including Epic's
 `failReason`) into a timeline shown by the Matchmaking check.
 
+**Its own queue slot and sub-game.** Like rebootpy, the bot publishes its *own*
+empty queue slot (`MatchmakingData1/2` with no group ID, barrier bits 0) instead
+of none, so the leader's client sees a well-formed member rather than a missing
+record. It also mirrors the leader's `SubGame_u`: fnbr hard-codes `1`, while a
+console in Battle Royale sends `2`, and the check flags any mismatch as
+"Sub-game differs".
+
 **Leave when the queue starts** (off by default) is a fallback: if matchmaking
 still fails with the bot in the party, the bot steps out as soon as the leader
-presses Play, so they queue alone, and rejoins after the match.
+readies or presses Play, so they queue alone, and rejoins once their match has started and ended.
 Toggle: **Lobby behaviour → Match the leader's mode**.
 
 **Matchmaking check** (Lobby page) shows what the bot is telling Fortnite: build,
