@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 125/125 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 132/132 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -208,3 +208,5 @@ modules plus a 167-line wiring file.
 - [x] "Can't find a match": a Ready bot is counted as a player that never connects. Bots now sit out by default (`botsSitOut`) on start, on every new party, and on readiness changes; auto-ready only when sit-out is off
 - [x] Kick/Promote only shown when the controlled bot leads the party, never on the bot's own card
 - [x] Server Config has a Bot accounts manager (list, edit in the settings pop-up, delete, add)
+- [x] Matchmaking reworked after research (FNLB guide: one bot, Duos/Trios/Squads, No Fill, the bot readies with you). The sit-out default was reverted; bots now ready last, fix (as leader) or flag Solo playlists, keep one bot per party, turn fill off as leader, leave once a player is `InGame`, and rejoin when that player's presence is back in a lobby
+- [!] Needs a real test: a full queue with one bot on Duos; the leave and rejoin timing

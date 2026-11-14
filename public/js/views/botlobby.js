@@ -123,8 +123,10 @@ export function addForm() {
 }
 
 const SETTING_LABELS = [
-	['botsSitOut', 'Sit out of matches (recommended)', "Bots can't play matches. A Ready bot makes matchmaking fail; sitting out lets your party queue while the bots wait in the lobby."],
-	['autoReady', 'Auto-ready (only if sit-out is off)', 'Bots ready up after every player is ready. Can stop the party finding a match.'],
+	['autoReady', 'Auto-ready with the players', 'The bot readies last, after every player. Use Duos, Trios or Squads (not Solo) with No Fill, like FNLB.'],
+	['leaveOnMatchStart', 'Leave when the match starts', 'Once the match loads, the bot leaves your party so it is free again.'],
+	['rejoinAfterMatch', 'Rejoin after the match', 'When you are back in a lobby, the bot rejoins your party (if it is joinable).'],
+	['botsSitOut', 'Sit out instead of readying', 'Only for parties that want to play without the bot. Off by default.'],
 	['partyCommands', 'Lobby chat commands', 'Players type !ready, !unready, !sitout or !copy in lobby chat.'],
 	['dmCommands', 'DM commands', 'Friends DM a bot CID_ / EID_ / !level / !copy / !help and so on.'],
 	['emotePlayOnce', 'Play emotes once', 'Stop an emote after its length instead of looping it.'],

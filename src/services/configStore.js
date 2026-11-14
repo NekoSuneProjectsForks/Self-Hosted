@@ -17,7 +17,9 @@ const DEFAULT_LOCAL_CATEGORY = {
 		acceptInvites: true,
 		acceptFriendRequests: true,
 		// Lobby-bot behaviour (all live, no restart).
-		botsSitOut: true,
+		botsSitOut: false,
+		leaveOnMatchStart: true,
+		rejoinAfterMatch: true,
 		autoReady: true,
 		partyCommands: true,
 		dmCommands: true,

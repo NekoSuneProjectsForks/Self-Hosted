@@ -9,12 +9,12 @@ import {
 import { asyncRoute, httpError } from '../http/helpers.js';
 import { getPlainConfig, updateLocalCategoryConfig } from '../services/configStore.js';
 
-const LOBBY_SETTINGS = ['botsSitOut', 'autoReady', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
+const LOBBY_SETTINGS = ['autoReady', 'leaveOnMatchStart', 'rejoinAfterMatch', 'botsSitOut', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
 
 function settingsOf(config = {}) {
 	const seconds = Number(config.emoteSeconds);
 	return {
-		...Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, config[key] !== false])),
+		...Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, key === 'botsSitOut' ? config[key] === true : config[key] !== false])),
 		emoteSeconds: Number.isFinite(seconds) ? seconds : 6
 	};
 }

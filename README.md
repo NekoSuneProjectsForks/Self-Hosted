@@ -250,15 +250,28 @@ Friends can message any local bot (main or extra):
 Messages between your own bots are ignored, so two bots can never get into a
 loop.
 
-### Matchmaking: bots sit out
+### Matchmaking (the FNLB way)
 
-Bots can't load into a match. A bot marked **Ready** counts as a player that
-then never connects, so the party can't find a match. By default every bot
-**sits out** whenever it starts or lands in a party, and stays sitting out: just
-ready up and start, and the bots wait in the lobby. A manual "Stop sitting out"
-is respected until the bot changes party. Switch this off under **Lobby
-behaviour → Sit out of matches** to use auto-ready instead (not recommended).
-In sit-out mode, `!ready` in lobby chat gets an explanation instead of readying.
+FNLB's guide: invite **one** bot, use **Duos, Trios or Squads** (not Solo) with
+**No Fill**, and ready up; the bot readies with you. These bots do the same:
+
+- **Ready last**: once every player is ready, the bot readies (auto-ready).
+- **Solo is fixed or flagged**: a Solo playlist can't queue a party of two or
+  more. If the bot leads the party, it switches to the Duo/Trio/Squad version
+  (Battle Royale and Zero Build). Otherwise it says so once in lobby chat and
+  doesn't ready. The Lobby page shows the same warning.
+- **One bot per party**: if several of your bots share a party, one (the same
+  one, picked on every bot) goes along and the others leave when the players
+  are ready.
+- **No Fill**: a bot that leads the party turns squad fill off.
+- **Leave when the match starts**: when a player loads in (`InGame`), the bot
+  leaves the party a few seconds later, so it's free again.
+- **Rejoin after the match**: when that player's presence shows them back in a
+  lobby, the bot rejoins their party (if it's joinable; otherwise invite it).
+
+Turn each of these on or off under **Bots → Lobby behaviour**. **Sit out instead
+of readying** is still there (off by default) for parties that want to play
+without the bot.
 
 ### Auto-ready and lobby chat commands
 

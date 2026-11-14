@@ -573,7 +573,7 @@ describe('copy a player\'s look', () => {
 	});
 });
 
-describe('bots sit out so the party can matchmake', () => {
+describe('sit-out mode (opt-in)', () => {
 	function sitOutClient() {
 		const client = fakeClient('bot');
 		client.party.me.id = 'bot';
@@ -590,16 +590,16 @@ describe('bots sit out so the party can matchmake', () => {
 	}
 	const wait = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-	it('sits out instead of readying when everyone is ready (default)', async () => {
+	it('sits out instead of readying when everyone is ready', async () => {
 		const client = sitOutClient();
-		runtimeFor(client).syncReadiness();
+		runtimeFor(client, { config: { botsSitOut: true } }).syncReadiness();
 		await wait();
 		assert.deepEqual(client.calls, [['setSittingOut', true]]);
 	});
 
 	it('never readies in sit-out mode', async () => {
 		const client = sitOutClient();
-		const runtime = runtimeFor(client);
+		const runtime = runtimeFor(client, { config: { botsSitOut: true } });
 		runtime.readyDelayMs = 1;
 		runtime.syncReadiness();
 		await wait();
@@ -611,13 +611,13 @@ describe('bots sit out so the party can matchmake', () => {
 	it('sits out when it lands in a new party', async () => {
 		const client = sitOutClient();
 		client.party.me.meta = {};
-		await runtimeFor(client).applyCategory({});
+		await runtimeFor(client, { config: { botsSitOut: true } }).applyCategory({});
 		assert.deepEqual(client.calls[0], ['setSittingOut', true]);
 	});
 
 	it('respects a manual "stop sitting out" until the bot changes party', async () => {
 		const client = sitOutClient();
-		const runtime = runtimeFor(client);
+		const runtime = runtimeFor(client, { config: { botsSitOut: true } });
 		await runtime.setSittingOut(false);
 		runtime.syncReadiness();
 		await wait();
@@ -626,8 +626,103 @@ describe('bots sit out so the party can matchmake', () => {
 
 	it('!ready in lobby chat explains instead of readying', async () => {
 		const client = sitOutClient();
-		await runtimeFor(client).handlePartyCommand({ author: { id: 'p1' }, content: '!ready' });
+		await runtimeFor(client, { config: { botsSitOut: true } }).handlePartyCommand({ author: { id: 'p1' }, content: '!ready' });
 		assert.equal(client.calls[0][0], 'partyMessage');
 		assert.equal(client.calls.some((c) => c[0] === 'setReadiness'), false);
+	});
+});
+
+describe('FNLB-style matchmaking', () => {
+	function readyLobby({ playlistId = 'Playlist_DefaultDuo', leader = false, extraBots = [], players = 1 } = {}) {
+		const client = fakeClient('bot');
+		client.party.me.id = 'bot';
+		client.party.me.isLeader = leader;
+		client.party.me.isReady = false;
+		client.party.me.setReadiness = async (ready) => {
+			client.calls.push(['setReadiness', ready]);
+			client.party.me.isReady = ready;
+		};
+		client.party.playlist = { linkId: { mnemonic: playlistId } };
+		client.party.setPlaylist = async (id) => client.calls.push(['setPlaylist', id]);
+		client.party.sendMessage = async (text) => client.calls.push(['partyMessage', text]);
+		client.leaveParty = async () => client.calls.push(['leaveParty']);
+		const members = [['bot', client.party.me]];
+		for (let i = 1; i <= players; i += 1) members.push([`p${i}`, { id: `p${i}`, isReady: true }]);
+		for (const id of extraBots) members.push([id, { id, isReady: false }]);
+		client.party.members = new Map(members);
+		const runtime = runtimeFor(client, { trustedIds: () => extraBots });
+		runtime.readyDelayMs = 1;
+		return { client, runtime };
+	}
+	const wait = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+	it('readies with the players on Duos (the FNLB flow)', async () => {
+		const { client, runtime } = readyLobby();
+		runtime.syncReadiness();
+		await wait();
+		assert.deepEqual(client.calls, [['setReadiness', true]]);
+	});
+
+	it('on Solo as leader: switches to Duos instead of readying', async () => {
+		const { client, runtime } = readyLobby({ playlistId: 'Playlist_DefaultSolo', leader: true });
+		runtime.syncReadiness();
+		await wait();
+		assert.deepEqual(client.calls, [['setPlaylist', 'Playlist_DefaultDuo']]);
+	});
+
+	it('on Solo with 3 players picks Squads; Zero Build maps too', async () => {
+		const { teamPlaylistFor } = await import('../src/runtime/LocalFnbrRuntime.js');
+		assert.equal(teamPlaylistFor('Playlist_DefaultSolo', 4), 'Playlist_DefaultSquad');
+		assert.equal(teamPlaylistFor('Playlist_NoBuildBR_Solo', 2), 'Playlist_NoBuildBR_Duo');
+		assert.equal(teamPlaylistFor('Playlist_SomeLTM_Solo', 2), null);
+	});
+
+	it('on Solo when a player leads: explains once in chat, does not ready', async () => {
+		const { client, runtime } = readyLobby({ playlistId: 'Playlist_DefaultSolo' });
+		runtime.syncReadiness();
+		runtime.syncReadiness();
+		await wait();
+		const messages = client.calls.filter((c) => c[0] === 'partyMessage');
+		assert.equal(messages.length, 1);
+		assert.match(messages[0][1], /Solo can't start with a bot/);
+		assert.equal(client.calls.some((c) => c[0] === 'setReadiness'), false);
+	});
+
+	it('with two of your bots, only one goes along; the other leaves', async () => {
+		const first = readyLobby({ extraBots: ['zzz-bot'] }); // 'bot' sorts first: it stays
+		first.runtime.syncReadiness();
+		await wait();
+		assert.deepEqual(first.client.calls, [['setReadiness', true]]);
+
+		const second = readyLobby({ extraBots: ['aaa-bot'] }); // 'aaa-bot' sorts first: this one leaves
+		second.runtime.syncReadiness();
+		await wait();
+		assert.equal(second.client.calls.some((c) => c[0] === 'leaveParty'), true);
+		assert.equal(second.client.calls.some((c) => c[0] === 'setReadiness'), false);
+	});
+
+	it('leaves when a player loads into the match, then rejoins them after', async () => {
+		const { client, runtime } = readyLobby();
+		runtime.leaveDelayMs = 1;
+		client.party.leader = { id: 'p1' };
+		runtime.onMemberMatchState({ id: 'p1' }, { location: 'InGame' });
+		await wait();
+		assert.equal(client.calls.some((c) => c[0] === 'leaveParty'), true);
+
+		// Still playing: no rejoin.
+		runtime.onFriendPresence({ friend: { id: 'p1', party: { id: 'their-party' } }, isPlaying: true });
+		assert.equal(client.calls.some((c) => c[0] === 'joinParty'), false);
+		// Back in the lobby: rejoin.
+		runtime.onFriendPresence({ friend: { id: 'p1', displayName: 'P', party: { id: 'their-party' } }, isPlaying: false });
+		await wait();
+		assert.deepEqual(client.calls.find((c) => c[0] === 'joinParty'), ['joinParty', 'their-party']);
+	});
+
+	it('ignores match changes of your own bots', async () => {
+		const { client, runtime } = readyLobby({ extraBots: ['other-bot'] });
+		runtime.leaveDelayMs = 1;
+		runtime.onMemberMatchState({ id: 'other-bot' }, { location: 'InGame' });
+		await wait();
+		assert.equal(client.calls.some((c) => c[0] === 'leaveParty'), false);
 	});
 });

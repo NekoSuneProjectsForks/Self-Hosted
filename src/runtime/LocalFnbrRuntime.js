@@ -75,6 +75,15 @@ export function normalizeProfile(input = {}) {
 	return out;
 }
 
+/** The Duo/Trio/Squad version of a Solo playlist for `players` people. */
+export function teamPlaylistFor(playlistId, players) {
+	const id = String(playlistId || '');
+	const size = players <= 2 ? 2 : players === 3 ? 3 : 4;
+	if (/^Playlist_DefaultSolo$/i.test(id)) return { 2: 'Playlist_DefaultDuo', 3: 'Playlist_Trios', 4: 'Playlist_DefaultSquad' }[size];
+	if (/^Playlist_NoBuildBR_Solo$/i.test(id)) return { 2: 'Playlist_NoBuildBR_Duo', 3: 'Playlist_NoBuildBR_Trio', 4: 'Playlist_NoBuildBR_Squad' }[size];
+	return null;
+}
+
 function firstCosmetic(categoryConfig, ...slots) {
 	for (const slot of slots) {
 		const rows = categoryConfig?.[slot];
@@ -484,6 +493,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		for (const event of ['friend:presence', 'friend:online', 'friend:offline']) {
 			client.on(event, () => this.emitFriendsThrottled());
 		}
+		client.on('friend:presence', (_before, after) => this.onFriendPresence(after));
 
 		for (const event of ['user:blocked', 'user:unblocked']) {
 			client.on(event, () => {
@@ -510,7 +520,8 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			client.on(event, () => this.emitParty());
 		}
 
-		client.on('party:member:matchstate:updated', (member) => {
+		client.on('party:member:matchstate:updated', (member, value) => {
+			this.onMemberMatchState(member, value);
 			this.emitParty();
 			if (member?.id !== client.user?.self?.id) return;
 			this.handleMatchState(safeValue(() => member.matchInfo, null));
@@ -1297,7 +1308,43 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 * default; auto-ready is only used when this is switched off.
 	 */
 	sitOutMode() {
-		return this.startConfig.localCategory?.config?.botsSitOut !== false;
+		return this.startConfig.localCategory?.config?.botsSitOut === true;
+	}
+
+	leaveOnMatchStart() {
+		return this.startConfig.localCategory?.config?.leaveOnMatchStart !== false;
+	}
+
+	rejoinAfterMatch() {
+		return this.startConfig.localCategory?.config?.rejoinAfterMatch !== false;
+	}
+
+	/** The user's own bots in this party (this one included), by account ID. */
+	ownBotIds() {
+		const selfId = this.client?.user?.self?.id;
+		return collectionValues(this.client?.party?.members)
+			.map((member) => member.id)
+			.filter((id) => id === selfId || this.isTrusted(id))
+			.sort();
+	}
+
+	/**
+	 * FNLB: "Two or more bots break the bot lobby." When several of the user's
+	 * bots share a party, exactly one (the same one on every bot: lowest ID)
+	 * goes along; the others leave once the players are ready.
+	 */
+	isDesignatedBot() {
+		const ids = this.ownBotIds();
+		return ids.length <= 1 || ids[0] === this.client?.user?.self?.id;
+	}
+
+	warnOnce(kind, text) {
+		const key = `${this.client?.party?.id}:${kind}`;
+		this.warned ||= new Set();
+		if (this.warned.has(key)) return;
+		this.warned.add(key);
+		this.log(text, 3);
+		this.client?.party?.sendMessage?.(text)?.catch?.(() => {});
 	}
 
 	ensureSittingOut() {
@@ -1336,6 +1383,8 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			this.readyTimer = null;
 		}
 
+		if (everyoneReady && !botReady && !this.matchmakingGuards()) return;
+
 		if (everyoneReady && !botReady) {
 			// Ready LAST: give the players a moment, then confirm they are all
 			// still ready before the bot readies.
@@ -1349,6 +1398,94 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			return;
 		}
 		if (!everyoneReady && botReady && this.autoReadied) this.applyAutoReady(false);
+	}
+
+	/**
+	 * Checks that the party can actually queue before the bot readies.
+	 * Returns false (and fixes or explains) when it can't:
+	 *  - Solo playlists can't take a party of 2+. As leader the bot switches to
+	 *    the Duo/Trio/Squad version; otherwise it tells the leader in chat.
+	 *  - More than one of the user's bots: the extra ones leave.
+	 */
+	matchmakingGuards() {
+		const client = this.client;
+		const party = client?.party;
+		if (!party) return false;
+
+		if (!this.isDesignatedBot()) {
+			this.log('Another of your bots is in this party; leaving so the party can matchmake (one bot per party).', 2);
+			party.sendMessage?.('Only one bot can go into a match. I\'ll step out so you can queue.')?.catch?.(() => {});
+			this.leaveParty().catch((error) => this.log(`Could not leave: ${error.message}`, 4));
+			return false;
+		}
+
+		const playlistId = serializeParty(party)?.playlistId || '';
+		if (/solo/i.test(playlistId)) {
+			const players = this.humanMembers().length + 1;
+			const fixed = teamPlaylistFor(playlistId, players);
+			if (party.me?.isLeader && fixed) {
+				this.log(`Solo can't queue with a bot in the party; switching to ${fixed}.`, 2);
+				party.setPlaylist(fixed).catch((error) => this.log(`Could not switch playlist: ${error.message}`, 4));
+				return false;
+			}
+			this.warnOnce(
+				'solo',
+				`Solo can't start with a bot in the party. Switch to ${fixed ? fixed.replace(/^Playlist_/, '') : 'Duos, Trios or Squads'} (No Fill) and ready up again.`
+			);
+			return false;
+		}
+
+		// FNLB turns fill off when it owns the party.
+		if (party.me?.isLeader && safeValue(() => party.squadFill, false) === true) {
+			party.setSquadFill?.(false)?.catch?.(() => {});
+		}
+		return true;
+	}
+
+	/** A player's match location from the event's NEW value (fnbr emits before storing it). */
+	onMemberMatchState(member, value) {
+		const selfId = this.client?.user?.self?.id;
+		if (!member || member.id === selfId || this.isTrusted(member.id)) return;
+		if (!this.leaveOnMatchStart() || value?.location !== 'InGame' || this.leavingForMatch) return;
+
+		// Remember who to come back to: the party leader if it's a player.
+		const leader = safeValue(() => this.client.party.leader, null);
+		this.rejoinHostId = leader && leader.id !== selfId && !this.isTrusted(leader.id) ? leader.id : member.id;
+		this.rejoinUntil = Date.now() + 3 * 60 * 60 * 1000;
+		this.leavingForMatch = true;
+		setTimeout(() => {
+			this.log('The match has started; leaving the party so the bot is free for the next game.', 2);
+			this.leaveParty()
+				.catch((error) => this.log(`Could not leave after match start: ${error.message}`, 4))
+				.finally(() => {
+					this.leavingForMatch = false;
+				});
+		}, this.leaveDelayMs ?? 3000).unref?.();
+	}
+
+	/** After a match, rejoin the player once their presence shows them back in a lobby. */
+	onFriendPresence(after) {
+		const friend = after?.friend;
+		if (!this.rejoinAfterMatch() || !this.rejoinHostId || friend?.id !== this.rejoinHostId) return;
+		if (Date.now() > (this.rejoinUntil || 0)) {
+			this.rejoinHostId = null;
+			return;
+		}
+		if (after.isPlaying || this.rejoining) return;
+		const partyId = safeValue(() => friend.party?.id, null);
+		if (!partyId || partyId === this.client?.party?.id) return;
+		this.rejoining = true;
+		this.client
+			.joinParty(partyId)
+			.then(() => {
+				this.log(`Back with ${friend.displayName || 'the player'} after their match.`, 1);
+				this.rejoinHostId = null;
+				this.emitParty();
+			})
+			.catch((error) => this.log(`Could not rejoin after the match (invite the bot instead): ${error.message}`, 3))
+			.finally(() => {
+				this.rejoining = false;
+			});
 	}
 
 	applyAutoReady(want) {

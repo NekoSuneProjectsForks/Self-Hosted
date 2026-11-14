@@ -150,8 +150,17 @@ export function renderLobby() {
 		`;
 	}
 
+	const ownBots = new Set([bot?.id, ...(state.botAccounts || []).map((account) => account.accountId)].filter(Boolean));
+	const botsInParty = members.filter((member) => ownBots.has(member.id)).length;
+	const soloWithBot = /solo/i.test(party.playlistId || '') && members.length > 1;
+	const warnings = [
+		soloWithBot ? 'This party is on a <strong>Solo</strong> playlist, which can\'t queue with more than one person. Pick Duos, Trios or Squads (No Fill). If the bot leads, it switches for you.' : '',
+		botsInParty > 1 ? `There are ${botsInParty} of your bots in this party. Only one bot can go into a match; the others leave when everyone is ready.` : ''
+	].filter(Boolean);
+
 	return `
 		<div class="grid gap-4">
+			${warnings.map((text) => `<div class="flex gap-3 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">${icon('triangle-alert', 'mt-0.5 h-4 w-4 shrink-0')}<p>${text}</p></div>`).join('')}
 			<section class="shell-panel rounded-lg p-4">
 				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
@@ -199,11 +208,11 @@ function renderLobbyControls(isLeader) {
 		<section class="shell-panel rounded-lg p-4">
 			<p class="mb-3 font-semibold">Lobby controls</p>
 			${leaderNote}
-			${can('autoReady') ? `<p class="mb-3 text-xs text-zinc-500">${icon('check-check', 'mr-1 inline h-3.5 w-3.5 align-[-2px]')} ${state.lobbySettings?.botsSitOut === false
-					? state.lobbySettings?.autoReady === false
-						? 'Sit-out and auto-ready are off: set the bot\'s readiness yourself.'
-						: 'Auto-ready is on: the bots ready after every player. Heads-up: a Ready bot can stop the party finding a match.'
-					: 'Bots sit out so your party can matchmake: just ready up and start. Bots can\'t play matches, so a Ready bot would make matchmaking fail.'}</p>` : ''}
+			${can('autoReady') ? `<p class="mb-3 text-xs text-zinc-500">${icon('check-check', 'mr-1 inline h-3.5 w-3.5 align-[-2px]')} ${state.lobbySettings?.botsSitOut === true
+					? 'Bots sit out: they stay in the lobby and don\'t go into the match.'
+					: state.lobbySettings?.autoReady === false
+						? 'Auto-ready is off: set the bot\'s readiness yourself.'
+						: 'Auto-ready is on: the bot readies after every player, then leaves once the match loads and rejoins you after. Use Duos, Trios or Squads with No Fill, and one bot per party.'}</p>` : ''}
 			<div class="flex flex-wrap gap-2">
 				${can('readiness') ? `
 					<button class="btn-secondary" data-action="party-ready">${icon('check')} Ready</button>
