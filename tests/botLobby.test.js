@@ -479,3 +479,46 @@ describe('join defaults', () => {
 		assert.equal(client.calls.some((c) => c[0] === 'setPrivacy'), false);
 	});
 });
+
+describe('emotes play once', () => {
+	function emoteClient(config) {
+		const client = fakeClient('bot');
+		client.party.me.emote = null;
+		client.party.me.setEmote = async (id) => {
+			client.calls.push(['setEmote', id]);
+			client.party.me.emote = id;
+		};
+		client.party.me.clearEmote = async () => {
+			client.calls.push(['clearEmote']);
+			client.party.me.emote = null;
+		};
+		return { client, runtime: runtimeFor(client, { config }) };
+	}
+	const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+	it('stops the emote after its length by default', async () => {
+		const { client, runtime } = emoteClient({ emoteSeconds: 1 });
+		await runtime.setCosmetic('emote', 'EID_Floss');
+		assert.deepEqual(client.calls, [['setEmote', 'EID_Floss']]);
+		await wait(1100);
+		assert.deepEqual(client.calls.at(-1), ['clearEmote']);
+	});
+
+	it('loops when play-once is switched off', async () => {
+		const { client, runtime } = emoteClient({ emotePlayOnce: false, emoteSeconds: 1 });
+		await runtime.setCosmetic('emote', 'EID_Floss');
+		await wait(1100);
+		assert.equal(client.calls.some((c) => c[0] === 'clearEmote'), false);
+	});
+
+	it('a new emote restarts the timer instead of cutting it short', async () => {
+		const { client, runtime } = emoteClient({ emoteSeconds: 1 });
+		await runtime.setCosmetic('emote', 'EID_A');
+		await wait(600);
+		await runtime.setCosmetic('emote', 'EID_B');
+		await wait(600);
+		assert.equal(client.calls.some((c) => c[0] === 'clearEmote'), false, 'not cleared 0.6 s into the second emote');
+		await wait(500);
+		assert.deepEqual(client.calls.at(-1), ['clearEmote']);
+	});
+});

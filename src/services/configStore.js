@@ -20,6 +20,8 @@ const DEFAULT_LOCAL_CATEGORY = {
 		autoReady: true,
 		partyCommands: true,
 		dmCommands: true,
+		emotePlayOnce: true,
+		emoteSeconds: 6,
 		startOutfit: [],
 		startBackpack: [],
 		startPickaxe: [],

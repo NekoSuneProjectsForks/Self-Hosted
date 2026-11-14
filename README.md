@@ -152,7 +152,11 @@ closed when it returns to the lobby, so one bot session contains many rounds.
 bot immediately. On the Items page, the slot comes from each item's type, so
 equipping Back Bling never replaces the Outfit. **Add to loadout** collects one
 item per slot, and **Equip loadout** applies them all at once (the emote goes
-last). Emotes have **Play emote** and **Stop emote**.
+last). Emotes have **Play emote** and **Stop emote**. Emotes **play once** by default:
+Fortnite keeps showing an emote until it is cleared, so the bot clears it after
+the emote length (6 s by default, 1–60 s). That applies to Play emote, the
+loadout, the join emote and `EID_` DMs. Switch it off, or change the length,
+under **Bot Lobby → Lobby behaviour**.
 
 **Profile** — battle pass level (e.g. 100) and whether the pass is owned, banner
 icon and colour, and crowns (shown with the Crowned emote). **Apply now**

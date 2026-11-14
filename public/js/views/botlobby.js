@@ -118,6 +118,7 @@ const SETTING_LABELS = [
 	['autoReady', 'Auto-ready', 'Bots ready up once every player in the lobby is ready, and unready if one backs out.'],
 	['partyCommands', 'Lobby chat commands', 'Players type !ready, !unready or !sitout in lobby chat and every bot follows.'],
 	['dmCommands', 'DM commands', 'Friends DM a bot CID_ / EID_ / !stats / !help and so on.'],
+	['emotePlayOnce', 'Play emotes once', 'Stop an emote after its length instead of looping it.'],
 	['acceptInvites', 'Accept party invites', 'Your own bots always accept each other either way.'],
 	['acceptFriendRequests', 'Accept friend requests', 'Your own bots always accept each other either way.']
 ];
@@ -138,6 +139,11 @@ function settingsPanel() {
 					</label>`
 				).join('')}
 			</div>
+			<label class="mt-3 flex flex-wrap items-center gap-2 text-sm text-zinc-300">
+				Emote length
+				<input class="input w-24 py-1" type="number" min="1" max="60" step="0.5" value="${escapeHtml(String(settings.emoteSeconds ?? 6))}" data-action="lobby-emote-seconds" ${settings.emotePlayOnce ? '' : 'disabled'} />
+				seconds <span class="text-xs text-zinc-500">(how long before a "play once" emote stops; most dances are 4 to 8 s)</span>
+			</label>
 		</section>
 	`;
 }

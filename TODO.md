@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 113/113 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 116/116 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -198,3 +198,4 @@ modules plus a 167-line wiring file.
 - [x] Loadout tray (one item per slot, equip all at once, kept in localStorage) + `PATCH /api/bots/:botId/loadout`; Play/Stop emote
 - [x] Profile: battle pass level/owned, banner, crowns (`setBattlePass`, `setBanner`, `setCosmeticStats`); live or saved as default; `!level`, `!crowns` DMs
 - [x] Join defaults: re-applied whenever the bot's party ID changes (joined, invited, new own party); live edits temporary; privacy only when leader
+- [x] Emotes play once: cleared after the configurable emote length (default 6 s); toggle + length under Lobby behaviour

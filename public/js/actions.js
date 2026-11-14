@@ -68,6 +68,7 @@ document.addEventListener('click', async (event) => {
 			if ((view === 'status' || view === 'categories' || view === 'items') && !state.dashboard) await loadDashboard(false);
 			if (view === 'items' && usingLocalFnbr()) {
 				state.botDefaults = await api('/api/bot-defaults').catch(() => null);
+				state.lobbySettings = (await api('/api/bot-lobby/settings').catch(() => null))?.settings || state.lobbySettings;
 			}
 			if (view === 'lobby') await loadParty(false);
 			if (view === 'botlobby') {
@@ -450,7 +451,8 @@ document.addEventListener('click', async (event) => {
 				method: 'PATCH',
 				body: { slot: 'emote', itemId: button.dataset.itemId }
 			});
-			setToast(result?.content || 'Emote playing.');
+			const once = state.lobbySettings ? state.lobbySettings.emotePlayOnce : true;
+			setToast(`${result?.content || 'Emote playing.'}${once === false ? ' It loops until you press Stop emote.' : ' It plays once.'}`);
 			render();
 			return;
 		}
@@ -780,6 +782,19 @@ document.addEventListener('change', (event) => {
 	if (epicAck) {
 		state.epicCodeAck = epicAck.checked;
 		render();
+	}
+	const emoteSeconds = event.target.closest('[data-action="lobby-emote-seconds"]');
+	if (emoteSeconds) {
+		api('/api/bot-lobby/settings', { method: 'PATCH', body: { emoteSeconds: Number(emoteSeconds.value) } })
+			.then((data) => {
+				state.lobbySettings = data.settings;
+				setToast(`Emotes stop after ${data.settings.emoteSeconds} s.`);
+				render();
+			})
+			.catch((error) => {
+				setToast(error.message, 'error');
+				render();
+			});
 	}
 	const lobbySetting = event.target.closest('[data-action="lobby-setting"]');
 	if (lobbySetting) {

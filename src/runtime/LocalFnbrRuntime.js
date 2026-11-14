@@ -357,6 +357,10 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			clearTimeout(this.defaultsTimer);
 			this.defaultsTimer = null;
 		}
+		if (this.emoteTimer) {
+			clearTimeout(this.emoteTimer);
+			this.emoteTimer = null;
+		}
 		this.health = { epicAuth: 'disconnected', xmpp: 'disconnected', stomp: 'disconnected', party: 'disconnected' };
 		if (!this.client) return;
 		const client = this.client;
@@ -1060,7 +1064,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		for (const [slot, itemId] of Object.entries(wanted)) {
 			if (!itemId) continue;
 			try {
-				await member[COSMETIC_SLOTS[slot]](itemId);
+				await this.equipSlot(member, slot, itemId);
 				applied.push({ slot, itemId });
 			} catch (error) {
 				failed.push({ slot, itemId, error: error.message });
@@ -1103,7 +1107,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const id = normalizeTarget(itemId, 'a cosmetic item ID');
 
 		try {
-			await member[COSMETIC_SLOTS[key]](id);
+			await this.equipSlot(member, key, id);
 		} catch (error) {
 			throw runtimeError(error.status || 502, `Failed to equip cosmetic: ${error.message}`);
 		}
@@ -1112,6 +1116,42 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		this.emit('cosmetics:updated', { botId: this.botId(), cosmetics });
 		this.queueSnapshot();
 		return { content: `${key} equipped.`, format: 1, source: 'fnbr', slot: key, itemId: id, cosmetics };
+	}
+
+	/** One place every cosmetic goes through, so emotes can be made to play once. */
+	async equipSlot(member, slot, itemId) {
+		await member[COSMETIC_SLOTS[slot]](itemId);
+		if (slot === 'emote') this.scheduleEmoteStop();
+	}
+
+	emotePlayOnce() {
+		return this.startConfig.localCategory?.config?.emotePlayOnce !== false;
+	}
+
+	emoteSeconds() {
+		const seconds = Number(this.startConfig.localCategory?.config?.emoteSeconds);
+		return Number.isFinite(seconds) ? Math.min(60, Math.max(1, seconds)) : 6;
+	}
+
+	/**
+	 * Fortnite keeps showing a party member's emote until it is cleared, so a
+	 * dance loops forever. "Play once" clears it after the emote's length. A
+	 * new emote restarts the timer; a manual stop cancels it.
+	 */
+	scheduleEmoteStop() {
+		if (this.emoteTimer) clearTimeout(this.emoteTimer);
+		this.emoteTimer = null;
+		if (!this.emotePlayOnce()) return;
+		this.emoteTimer = setTimeout(() => {
+			this.emoteTimer = null;
+			const member = this.client?.party?.me;
+			if (!member || !safeValue(() => member.emote, null)) return;
+			member
+				.clearEmote()
+				.then(() => this.emit('cosmetics:updated', { botId: this.botId(), cosmetics: this.toBotCard().cosmetics }))
+				.catch(() => {});
+		}, this.emoteSeconds() * 1000);
+		this.emoteTimer.unref?.();
 	}
 
 	async setEmote(itemId) {
@@ -1131,7 +1171,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			const itemId = String(items?.[slot] || '').trim();
 			if (!itemId) continue;
 			try {
-				await member[COSMETIC_SLOTS[slot]](itemId);
+				await this.equipSlot(member, slot, itemId);
 				applied.push({ slot, itemId });
 			} catch (error) {
 				failed.push({ slot, itemId, error: error.message });
@@ -1156,6 +1196,8 @@ export class LocalFnbrRuntime extends BaseRuntime {
 
 	async clearEmote() {
 		const { member } = this.requireMember();
+		if (this.emoteTimer) clearTimeout(this.emoteTimer);
+		this.emoteTimer = null;
 		await member.clearEmote();
 		const cosmetics = this.toBotCard().cosmetics;
 		this.emit('cosmetics:updated', { botId: this.botId(), cosmetics });

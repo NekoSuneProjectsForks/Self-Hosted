@@ -9,7 +9,15 @@ import {
 import { asyncRoute, httpError } from '../http/helpers.js';
 import { getPlainConfig, updateLocalCategoryConfig } from '../services/configStore.js';
 
-const LOBBY_SETTINGS = ['autoReady', 'partyCommands', 'dmCommands', 'acceptInvites', 'acceptFriendRequests'];
+const LOBBY_SETTINGS = ['autoReady', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
+
+function settingsOf(config = {}) {
+	const seconds = Number(config.emoteSeconds);
+	return {
+		...Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, config[key] !== false])),
+		emoteSeconds: Number.isFinite(seconds) ? seconds : 6
+	};
+}
 
 /**
  * Bot Lobby: extra Epic accounts that run as their own local fnbr clients next
@@ -155,7 +163,7 @@ export function registerBotAccountRoutes(ctx) {
 		...guard,
 		asyncRoute(async (req, res) => {
 			const config = (await getPlainConfig(req.user.id)).localCategory?.config || {};
-			return res.json({ settings: Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, config[key] !== false])) });
+			return res.json({ settings: settingsOf(config) });
 		})
 	);
 
@@ -165,13 +173,19 @@ export function registerBotAccountRoutes(ctx) {
 		asyncRoute(async (req, res) => {
 			const body = req.body || {};
 			const changes = LOBBY_SETTINGS.filter((key) => body[key] !== undefined);
-			if (!changes.length) throw httpError(400, 'No lobby setting was provided.');
+			let seconds;
+			if (body.emoteSeconds !== undefined) {
+				seconds = Number(body.emoteSeconds);
+				if (!Number.isFinite(seconds) || seconds < 1 || seconds > 60) throw httpError(400, 'Emote length must be 1 to 60 seconds.');
+			}
+			if (!changes.length && seconds === undefined) throw httpError(400, 'No lobby setting was provided.');
 			const localCategory = await updateLocalCategoryConfig(req.user.id, async (next) => {
 				for (const key of changes) next[key] = Boolean(body[key]);
+				if (seconds !== undefined) next.emoteSeconds = Math.round(seconds * 10) / 10;
 			});
 			runtime.applyLocalCategoryLive(req.user.id, localCategory);
 			return res.json({
-				settings: Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, localCategory.config[key] !== false])),
+				settings: settingsOf(localCategory.config),
 				content: 'Lobby settings saved and applied to the running bots.'
 			});
 		})
