@@ -74,3 +74,32 @@ describe('Tracker bots', () => {
 		await assert.rejects(() => runtime.joinParty('someone'), /tracker/);
 	});
 });
+
+import { summarize } from '../src/services/playerTracker.js';
+
+describe('Match totals (K/D and more)', () => {
+	it('works out K/D, win rate, kills per match, top-10 rate and average time', () => {
+		const t = summarize([
+			{ matches: 1, wins: 1, kills: 8, minutes: 19, score: 300, placement: 1 },
+			{ matches: 1, wins: 0, kills: 3, minutes: 14, score: 120, placement: 5 },
+			{ matches: 2, wins: 0, kills: 1, minutes: 10, score: 40, placement: 25 }
+		]);
+		assert.equal(t.matches, 4);
+		assert.equal(t.wins, 1);
+		assert.equal(t.deaths, 3);
+		assert.equal(t.kills, 12);
+		assert.equal(t.kd, 4);
+		assert.equal(t.winRate, 25);
+		assert.equal(t.killsPerMatch, 3);
+		assert.equal(t.top10Rate, 50);
+		assert.equal(t.avgMinutes, 10.8);
+	});
+	it('is all zeros with no matches (no division by zero)', () => {
+		const t = summarize([]);
+		assert.equal(t.kd, 0);
+		assert.equal(t.winRate, 0);
+	});
+	it('a flawless run counts K/D as kills (no deaths)', () => {
+		assert.equal(summarize([{ matches: 2, wins: 2, kills: 10 }]).kd, 10);
+	});
+});

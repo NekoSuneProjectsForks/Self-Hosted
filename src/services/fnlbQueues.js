@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import { MatchRound } from '../models/index.js';
 import { playlistLabel } from './playerTracker.js';
+import { friendlyMatchmakingError } from '../runtime/fnlbLogParser.js';
 
 /**
  * Bot-lobby queue history for the Legacy FNLB engine, built from FNLB's own
@@ -66,14 +67,15 @@ export async function recordFnlbMatchmaking(userId, event) {
 	return null;
 }
 
-/** Recent FNLB queues, newest first, for the Matches page. */
-export async function fnlbQueues(userId, limit = 30) {
-	const rows = await MatchRound.findAll({
-		where: { userId, source: 'fnlb', botId: { [Op.like]: `${FNLB_ROUND_PREFIX}%` } },
-		order: [['startedAt', 'DESC']],
-		limit
-	});
-	return rows.map((row) => {
+/**
+ * FNLB queues for the Matches page, newest first, one page at a time, for
+ * one bot (by name) or all, with a summary (bot lobby rate, queue time).
+ */
+export async function fnlbQueues(userId, { bot = null, page = 1, pageSize = 10 } = {}) {
+	const where = { userId, source: 'fnlb' };
+	where.botId = bot ? `${FNLB_ROUND_PREFIX}${bot}` : { [Op.like]: `${FNLB_ROUND_PREFIX}%` };
+	const rows = await MatchRound.findAll({ where, order: [['startedAt', 'DESC']], limit: 1000 });
+	const all = rows.map((row) => {
 		const json = row.toJSON();
 		const info = meta(json);
 		return {
@@ -85,9 +87,26 @@ export async function fnlbQueues(userId, limit = 30) {
 			outcome: info.outcome || null,
 			realPlayers: info.realPlayers ?? null,
 			region: info.region || null,
-			reason: info.reason || null,
+			reason: info.reason ? friendlyMatchmakingError(info.reason) : null,
 			startedAt: json.startedAt,
 			queueSeconds: json.duration
 		};
 	});
+	const matched = all.filter((q) => q.outcome === 'matched');
+	const timed = matched.filter((q) => Number.isFinite(q.queueSeconds));
+	const size = Math.min(50, Math.max(5, Number(pageSize) || 10));
+	const pages = Math.max(1, Math.ceil(all.length / size));
+	const current = Math.min(pages, Math.max(1, Number(page) || 1));
+	return {
+		queues: all.slice((current - 1) * size, current * size),
+		paging: { page: current, pages, pageSize: size, total: all.length },
+		summary: {
+			queues: all.length,
+			matched: matched.length,
+			botLobbies: matched.filter((q) => q.realPlayers === 1).length,
+			failed: all.filter((q) => q.outcome === 'failed').length,
+			avgQueueSeconds: timed.length ? Math.round(timed.reduce((sum, q) => sum + q.queueSeconds, 0) / timed.length) : null
+		},
+		bots: [...new Set(all.map((q) => q.bot))]
+	};
 }

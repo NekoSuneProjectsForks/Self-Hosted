@@ -36,3 +36,18 @@ describe('FNLB log → matchmaking events', () => {
 		assert.equal(playlistLabel('playlist_forbiddenfruitnobuildbrstack'), 'Blitz · Six Stack');
 	});
 });
+
+import { friendlyMatchmakingError } from '../src/runtime/fnlbLogParser.js';
+
+describe('Readable FNLB matchmaking errors', () => {
+	it('turns the heartbeat dump into one line', () => {
+		const raw = '[Bot] [nekouwu4] [! ERR] Error: Failed to request heartbeat { "name": "EpicgamesAPIError", "message": "Service threw error: matchmaking_service_error.ticket_heartbeat_failure.200007 with message: Ticket ffb8378e';
+		assert.equal(friendlyMatchmakingError(raw), 'The matchmaking ticket expired (heartbeat failed). Try readying up again. (200007)');
+	});
+	it('names unknown Epic matchmaking errors in plain words', () => {
+		assert.match(friendlyMatchmakingError('matchmaking_service_error.region_unavailable.1'), /region unavailable/);
+	});
+	it('falls back to the first line without the JSON', () => {
+		assert.equal(friendlyMatchmakingError('[Bot] [x] [! ERR] Error: Matchmaking failed: timed out { "a": 1 }'), 'Matchmaking failed: timed out');
+	});
+});

@@ -14,6 +14,33 @@
 const ANSI = /\u001b\[[0-9;]*m/g;
 const BOT = /\[Bot\]\s*\[([^\]]+)\]/;
 
+const KNOWN_ERRORS = {
+	ticket_heartbeat_failure: 'The matchmaking ticket expired (heartbeat failed). Try readying up again.',
+	ticket_not_found: 'Epic lost the matchmaking ticket. Try readying up again.',
+	party_not_ready: 'Not everyone in the party was ready.',
+	banned: 'The bot has a matchmaking ban.'
+};
+
+/** Turns FNLB's raw error dump into one short, readable line. */
+export function friendlyMatchmakingError(raw) {
+	const text = String(raw ?? '').replace(ANSI, '');
+	const service = /matchmaking_service_error\.([a-z_]+)(?:\.(\d+))?/i.exec(text);
+	if (service) {
+		const known = KNOWN_ERRORS[service[1].toLowerCase()];
+		const code = service[2] ? ` (${service[2]})` : '';
+		return `${known || `Epic matchmaking error: ${service[1].replace(/_/g, ' ')}.`}${code}`;
+	}
+	const epic = /errors\.com\.epicgames\.([\w.]+)/i.exec(text);
+	if (epic) return `Epic error: ${epic[1].split('.').pop().replace(/_/g, ' ')}.`;
+	const line = text
+		.replace(BOT, '')
+		.replace(/\[[^\]]{1,6}\]/g, '')
+		.split(/[{\n]/)[0]
+		.replace(/^\s*Error:\s*/i, '')
+		.trim();
+	return line.slice(0, 140) || 'Matchmaking failed.';
+}
+
 export function parseFnlbLog(raw) {
 	const text = String(raw ?? '').replace(ANSI, '');
 	const bot = BOT.exec(text)?.[1]?.trim();
@@ -37,7 +64,7 @@ export function parseFnlbLog(raw) {
 	match = /Matchmaking[^\n]*?(failed|cancel+ed|error|timed out|stopped)([^\n]*)/i.exec(text);
 	if (match) {
 		const playlist = /\((playlist_[^)]+)\)/i.exec(text)?.[1] || null;
-		return { type: 'failed', bot, playlist, reason: text.replace(BOT, '').replace(/\[[^\]]{1,4}\]/g, '').trim().slice(0, 200) };
+		return { type: 'failed', bot, playlist, reason: friendlyMatchmakingError(text) };
 	}
 	return null;
 }

@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { render } from './render.js';
 import { isControlled, isHelperBotId } from './selectors.js';
 import { api } from './api.js';
+import { trackedQuery } from '../data/loaders.js';
 
 /**
  * Targeted realtime updates. Each event patches just the slice of state it
@@ -133,7 +134,7 @@ export function connectSocket() {
 
 	state.socket.on('fnlb:queue', () => {
 		if (state.view !== 'matches') return;
-		api('/api/tracked-players')
+		api(`/api/tracked-players${trackedQuery()}`)
 			.then((data) => {
 				state.tracked = data;
 				renderIfVisible('matches');
@@ -143,7 +144,7 @@ export function connectSocket() {
 
 	state.socket.on('tracked:updated', () => {
 		if (state.view !== 'matches') return;
-		api('/api/tracked-players')
+		api(`/api/tracked-players${trackedQuery()}`)
 			.then((data) => {
 				state.tracked = data;
 				renderIfVisible('matches');

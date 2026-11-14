@@ -318,8 +318,26 @@ document.addEventListener('click', async (event) => {
 			render();
 			return;
 		}
+		if (action === 'matches-page' || action === 'queues-page') {
+			const page = Math.max(1, Number(button.dataset.page) || 1);
+			state.matchesQuery = { ...(state.matchesQuery || {}), [action === 'matches-page' ? 'page' : 'qpage']: page };
+			await loadTracked();
+			return;
+		}
+		if (action === 'career-load') {
+			const accountId = button.dataset.accountId;
+			state.career = { accountId, loading: true };
+			render();
+			try {
+				state.career = { accountId, data: await api(`/api/tracked-players/career/${encodeURIComponent(accountId)}`) };
+			} catch (error) {
+				state.career = { accountId, error: error.message };
+			}
+			render();
+			return;
+		}
 		if (action === 'tracked-poll') {
-			const result = await api('/api/tracked-players/poll', { method: 'POST', body: {} });
+			const result = await api('/api/tracked-players/poll', { method: 'POST', body: { bot: state.matchesQuery?.bot || undefined, page: state.matchesQuery?.page, qpage: state.matchesQuery?.qpage } });
 			state.tracked = result;
 			setToast(result.recorded ? `Recorded ${result.recorded} new match(es).` : 'Stats checked: no new matches yet. Epic updates stats a few minutes after a match.');
 			render();
@@ -327,16 +345,17 @@ document.addEventListener('click', async (event) => {
 		}
 		if (action === 'tracked-remove') {
 			if (!window.confirm('Stop tracking this player? Recorded matches stay.')) return;
-			state.tracked = await api(`/api/tracked-players/${encodeURIComponent(button.dataset.trackedId)}`, { method: 'DELETE', body: {} });
-			render();
+			await api(`/api/tracked-players/${encodeURIComponent(button.dataset.trackedId)}`, { method: 'DELETE', body: {} });
+			state.matchesQuery = { bot: '', page: 1, qpage: 1 };
+			await loadTracked();
 			return;
 		}
 		if (action === 'tracked-toggle') {
-			state.tracked = await api(`/api/tracked-players/${encodeURIComponent(button.dataset.trackedId)}`, {
+			await api(`/api/tracked-players/${encodeURIComponent(button.dataset.trackedId)}`, {
 				method: 'PATCH',
 				body: { enabled: button.dataset.enabled === 'true' }
 			});
-			render();
+			await loadTracked();
 			return;
 		}
 		if (action === 'friend-open-messages') {
@@ -728,7 +747,9 @@ document.addEventListener('submit', async (event) => {
 			return;
 		}
 		if (form.dataset.form === 'tracked-add') {
-			state.tracked = await api('/api/tracked-players', { method: 'POST', body: { player: data.player } });
+			const added = await api('/api/tracked-players', { method: 'POST', body: { player: data.player } });
+			state.matchesQuery = { bot: added.selected?.accountId || '', page: 1, qpage: 1 };
+			state.tracked = added;
 			form.reset();
 			setToast('Tracking started. Matches show up a few minutes after each game ends.');
 			render();
@@ -1031,6 +1052,13 @@ document.addEventListener('submit', async (event) => {
 });
 
 document.addEventListener('change', (event) => {
+	const matchesBot = event.target.closest('[data-action="matches-bot"]');
+	if (matchesBot) {
+		state.matchesQuery = { bot: matchesBot.value, page: 1, qpage: 1 };
+		state.career = null;
+		loadTracked().catch((error) => setToast(error.message, 'error'));
+		return;
+	}
 	const autoRefresh = event.target.closest('[data-action="toggle-auto-refresh"]');
 	if (autoRefresh) state.autoRefresh = autoRefresh.checked;
 	const engineSelect = event.target.closest('[data-action="config-engine"]');

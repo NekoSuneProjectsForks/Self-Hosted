@@ -1,7 +1,7 @@
 import { Op } from 'sequelize';
 import { ensureDataDirs } from '../lib/paths.js';
 import { sequelize } from './sequelize.js';
-import { ensureBotAccountColumns, ensureBotConfigColumns } from './migrations.js';
+import { ensureBotAccountColumns, ensureBotConfigColumns, ensureTrackedPlayerColumns } from './migrations.js';
 import { BotLog } from './BotLog.js';
 import './associations.js';
 import './TrackedPlayer.js';
@@ -47,6 +47,7 @@ export async function initDatabase() {
 	await sequelize.sync();
 	await ensureBotConfigColumns();
 	await ensureBotAccountColumns();
+	await ensureTrackedPlayerColumns();
 }
 
 export async function normalizeSuspension(user) {

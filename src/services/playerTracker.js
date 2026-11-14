@@ -121,6 +121,7 @@ function serializePlayer(row) {
 		id: row.id,
 		accountId: row.accountId,
 		displayName: row.displayName,
+		kind: row.kind || 'player',
 		enabled: row.enabled,
 		lastPolledAt: row.lastPolledAt,
 		lastError: row.lastError,
@@ -137,10 +138,32 @@ export async function addTrackedPlayer(userId, { accountId, displayName }) {
 	if (!accountId) throw httpError(400, 'Player not found.');
 	const existing = await TrackedPlayer.findOne({ where: { userId, accountId } });
 	if (existing) return serializePlayer(existing);
-	if ((await TrackedPlayer.count({ where: { userId } })) >= MAX_TRACKED_PLAYERS) {
+	if ((await TrackedPlayer.count({ where: { userId, kind: 'player' } })) >= MAX_TRACKED_PLAYERS) {
 		throw httpError(400, `You can track up to ${MAX_TRACKED_PLAYERS} players.`);
 	}
 	return serializePlayer(await TrackedPlayer.create({ userId, accountId, displayName: displayName || null }));
+}
+
+/**
+ * The user's own bot accounts are tracked automatically (no name to type):
+ * local main/extra bots and FNLB bots (once their Epic ID is known).
+ * `bots` = [{ accountId, displayName }]. Returns how many were new.
+ */
+export async function syncBotTracking(userId, bots) {
+	let added = 0;
+	for (const bot of bots) {
+		if (!bot?.accountId) continue;
+		const [row, created] = await TrackedPlayer.findOrCreate({
+			where: { userId, accountId: bot.accountId },
+			defaults: { kind: 'bot', displayName: bot.displayName || null }
+		});
+		if (created) added += 1;
+		const updates = {};
+		if (row.kind !== 'bot') updates.kind = 'bot';
+		if (bot.displayName && bot.displayName !== row.displayName) updates.displayName = bot.displayName;
+		if (Object.keys(updates).length) await row.update(updates);
+	}
+	return added;
 }
 
 export async function removeTrackedPlayer(userId, id) {
@@ -226,45 +249,77 @@ function parseMeta(round) {
 	}
 }
 
-/** Recent tracked matches plus totals (today and all recorded). */
-export async function trackedMatches(userId, accountId = null, limit = 100) {
+/**
+ * Totals for a set of recorded matches. K/D follows Epic: kills per death,
+ * where every match that isn't a win counts as one death.
+ */
+export function summarize(list) {
+	const matches = list.reduce((sum, m) => sum + (m.matches || 1), 0);
+	const wins = list.reduce((sum, m) => sum + (m.wins || 0), 0);
+	const kills = list.reduce((sum, m) => sum + (m.kills || 0), 0);
+	const minutes = list.reduce((sum, m) => sum + (m.minutes || 0), 0);
+	const score = list.reduce((sum, m) => sum + (m.score || 0), 0);
+	const top10 = list.reduce((sum, m) => sum + (m.wins || (m.placement && m.placement <= 10) ? m.matches || 1 : 0), 0);
+	const deaths = Math.max(0, matches - wins);
+	const round = (value, digits = 2) => Math.round(value * 10 ** digits) / 10 ** digits;
+	return {
+		matches,
+		wins,
+		kills,
+		deaths,
+		kd: matches ? round(kills / Math.max(1, deaths)) : 0,
+		winRate: matches ? round((wins / matches) * 100, 1) : 0,
+		killsPerMatch: matches ? round(kills / matches) : 0,
+		avgMinutes: matches ? round(minutes / matches, 1) : 0,
+		minutes,
+		score,
+		top10Rate: matches ? round((top10 / matches) * 100, 1) : 0
+	};
+}
+
+function toMatch(json) {
+	const meta = parseMeta(json);
+	return {
+		id: json.id,
+		accountId: json.botId.slice(TRACKED_ROUND_PREFIX.length),
+		player: meta.player || null,
+		playlistId: json.playlistId,
+		playlistLabel: meta.playlistLabel || playlistLabel(json.playlistId),
+		inputLabel: meta.inputLabel || meta.input || null,
+		matches: meta.matches || 1,
+		kills: json.kills,
+		win: json.win,
+		wins: meta.wins ?? (json.win ? 1 : 0),
+		placement: json.placement,
+		score: meta.score ?? null,
+		minutes: meta.minutes ?? null,
+		playersOutlived: meta.playersOutlived ?? null,
+		startedAt: json.startedAt,
+		endedAt: json.endedAt
+	};
+}
+
+/**
+ * Recorded matches for one tracked account (or all), newest first, one page
+ * at a time, with totals for today and for everything recorded.
+ */
+export async function trackedMatches(userId, accountId = null, { page = 1, pageSize = 20 } = {}) {
 	const { Op } = await import('sequelize');
 	const where = { userId, source: 'epic' };
 	where.botId = accountId ? `${TRACKED_ROUND_PREFIX}${accountId}` : { [Op.like]: `${TRACKED_ROUND_PREFIX}%` };
-	const rows = await MatchRound.findAll({ where, order: [['endedAt', 'DESC']], limit });
-	const matches = rows.map((row) => {
-		const json = row.toJSON();
-		const meta = parseMeta(json);
-		return {
-			id: json.id,
-			accountId: json.botId.slice(TRACKED_ROUND_PREFIX.length),
-			player: meta.player || null,
-			playlistId: json.playlistId,
-			playlistLabel: meta.playlistLabel || playlistLabel(json.playlistId),
-			inputLabel: meta.inputLabel || meta.input || null,
-			matches: meta.matches || 1,
-			kills: json.kills,
-			win: json.win,
-			wins: meta.wins ?? (json.win ? 1 : 0),
-			placement: json.placement,
-			score: meta.score ?? null,
-			minutes: meta.minutes ?? null,
-			startedAt: json.startedAt,
-			endedAt: json.endedAt
-		};
-	});
+	const rows = await MatchRound.findAll({ where, order: [['endedAt', 'DESC']], limit: 2000 });
+	const all = rows.map((row) => toMatch(row.toJSON()));
+	const size = Math.min(100, Math.max(5, Number(pageSize) || 20));
+	const pages = Math.max(1, Math.ceil(all.length / size));
+	const current = Math.min(pages, Math.max(1, Number(page) || 1));
 	const startOfDay = new Date();
 	startOfDay.setHours(0, 0, 0, 0);
-	const total = (list) => ({
-		matches: list.reduce((sum, m) => sum + m.matches, 0),
-		wins: list.reduce((sum, m) => sum + (m.wins || 0), 0),
-		kills: list.reduce((sum, m) => sum + (m.kills || 0), 0)
-	});
 	return {
-		matches,
+		matches: all.slice((current - 1) * size, current * size),
+		paging: { page: current, pages, pageSize: size, total: all.length },
 		totals: {
-			today: total(matches.filter((m) => new Date(m.endedAt) >= startOfDay)),
-			recorded: total(matches)
+			today: summarize(all.filter((m) => new Date(m.endedAt) >= startOfDay)),
+			recorded: summarize(all)
 		}
 	};
 }

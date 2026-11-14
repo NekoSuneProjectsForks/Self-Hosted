@@ -134,8 +134,18 @@ export async function loadMatches(shouldRender = true) {
 }
 
 /** Player match tracking (any engine): tracked players, recent matches, totals. */
+export function trackedQuery() {
+	const q = state.matchesQuery || {};
+	const params = new URLSearchParams();
+	if (q.bot) params.set('bot', q.bot);
+	if (q.page > 1) params.set('page', String(q.page));
+	if (q.qpage > 1) params.set('qpage', String(q.qpage));
+	const text = params.toString();
+	return text ? `?${text}` : '';
+}
+
 export async function loadTracked(shouldRender = true) {
-	state.tracked = await api('/api/tracked-players');
+	state.tracked = await api(`/api/tracked-players${trackedQuery()}`);
 	if (shouldRender) render();
 }
 

@@ -19,6 +19,16 @@ export async function ensureBotAccountColumns() {
 	}
 }
 
+/** TrackedPlayers shipped without `kind` (bot vs. player). */
+export async function ensureTrackedPlayerColumns() {
+	const queryInterface = sequelize.getQueryInterface();
+	const table = await queryInterface.describeTable('TrackedPlayers').catch(() => null);
+	if (!table) return;
+	if (!table.kind) {
+		await queryInterface.addColumn('TrackedPlayers', 'kind', { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'player' });
+	}
+}
+
 export async function ensureBotConfigColumns() {
 	const queryInterface = sequelize.getQueryInterface();
 	const table = await queryInterface.describeTable('BotConfigs').catch(() => null);

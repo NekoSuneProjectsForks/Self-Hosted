@@ -28,6 +28,13 @@ TrackedPlayer.init(
 			type: DataTypes.STRING(64),
 			allowNull: true
 		},
+		// "bot": one of the user's own bot accounts, tracked automatically.
+		// "player": someone the user added by name.
+		kind: {
+			type: DataTypes.STRING(8),
+			allowNull: false,
+			defaultValue: 'player'
+		},
 		enabled: {
 			type: DataTypes.BOOLEAN,
 			allowNull: false,

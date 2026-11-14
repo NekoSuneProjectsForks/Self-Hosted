@@ -69,6 +69,8 @@ export const state = {
 	unread: {},
 	matches: [],
 	tracked: null,
+	matchesQuery: { bot: '', page: 1, qpage: 1 }, // Matches page: selected bot + pages
+	career: null, // { accountId, loading, data, error }
 	currentMatch: null,
 	toast: null,
 	busy: false,

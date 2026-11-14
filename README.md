@@ -367,45 +367,37 @@ uploads or manual entry.
 
 ---
 
-## Player match tracking (any engine)
+## Match stats (any engine)
 
-**Matches → Player tracking** records every match a member plays, including
-FNLB bot lobbies, without anything joining their party:
+**Matches** shows the stats of **your own bots**, read from each bot account's
+public Epic stats, with nothing to type in:
 
-1. An admin signs in the **server tracker** (Admin → Tracker → Sign in with
-   Epic, using a dummy account) and starts it. It reads stats for every member,
-   never accepts invites, never joins a party and never readies.
-2. On **Matches**, members add their Epic name. Their stats must be public
-   (Fortnite → Settings → Account and Privacy → Show on career leaderboard).
-3. At the tracker's interval (1 to 15 minutes, default 2) or on **Check now**,
-   it reads Epic's stats. Each playlist whose match count went up is a
-   finished match: mode, kills, win or best top-N placement, minutes, score
-   and input.
+- Bots are picked up automatically: local main and extra bots (local engine),
+  and FNLB bots once they're logged in on this server (their Epic account ID
+  comes from the fnlb SDK).
+- **Pick a bot** (or "All bots and players") to see:
+  - Matches, wins and win rate, **K/D** (kills per non-winning match, like
+    Epic), kills per match, top-10 rate, and average match time with hours
+    played.
+  - **Career (all time, from Epic)**: overall, solo, duo, trio, squad and LTM
+    matches, wins, win rate, kills and K/D, loaded on demand.
+  - A **paged** match table: time, mode, input, result (Victory Royale or Top
+    N), kills, players outlived, time and score.
+- You can still track a player by name under "Also track a player"
+  (up to 10; bots don't count toward that).
 
-Epic updates stats a few minutes after a match ends. The first check only
-stores a starting point. If the server tracker is off, a member's own running
-local bot reads their stats instead.
-
-### Friends and DMs on the Legacy FNLB engine
-
-The dashboard starts FNLB through the official `fnlb` SDK, so it talks to the
-bots it runs over FNLB's local bridge:
-
-- **DMs (whispers)**: incoming messages arrive through `Events.FriendMessage`
-  and are saved like local-engine DMs. Replies are sent with `bot.whisper()`.
-  The Messages page works on FNLB now. The other player must be the bot's
-  friend.
-- **Friends**: accept, decline, add, remove, block and unblock use the SDK
-  directly when the bot runs on this server, and fall back to FNLB's cloud
-  commands otherwise. Friend lists refresh on friend, request and block events.
-
-DMs need the bot running on this server's FNLB cluster (not only in FNLB's
-cloud): start the cluster and wait for the bot to be ready.
+Stats are read by the admin's **server tracker** (Admin → Tracker), which never
+joins a party. Members aren't shown which account it is. Epic updates stats a
+few minutes after a match ends, and the first check only records a starting
+point. Bot accounts' stats must be public.
 
 ### FNLB bot lobby queues
 
-With the Legacy FNLB engine, the Matches page also lists every queue FNLB's bot
-reports in its log (`Starting matchmaking [v3]`, `Matchmaking ended
+With the Legacy FNLB engine, the Matches page also lists (paged, and filtered to
+the selected bot) every queue FNLB's bot reports in its log, with a summary
+(queues, bot-lobby rate, average queue time, failures). Errors are shortened
+to one readable line (for example "The matchmaking ticket expired (heartbeat
+failed)"). It reads the lines (`Starting matchmaking [v3]`, `Matchmaking ended
 successfully (...). Real players in the match: N`). It shows the mode, region,
 queue time and whether it was a real bot lobby (you were the only real player).
 

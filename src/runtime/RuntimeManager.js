@@ -13,7 +13,7 @@ import { runtimeError } from './BaseRuntime.js';
 import { BotLog, FriendMessage, pruneLogs } from '../models/index.js';
 import { closeActiveSessions, recordBotSnapshot } from '../services/sessionHistory.js';
 import { closeMatchRound, openMatchRound } from '../services/matchTracker.js';
-import { pollUserPlayers, usersWithTrackedPlayers } from '../services/playerTracker.js';
+import { pollUserPlayers, syncBotTracking, usersWithTrackedPlayers } from '../services/playerTracker.js';
 import { recordFnlbMatchmaking } from '../services/fnlbQueues.js';
 import { getTrackerSettings, localEngineAllowed, updateTrackerSettings } from '../services/serverSettings.js';
 import { trackerCategory } from './LocalFnbrRuntime.js';
@@ -1251,7 +1251,35 @@ export class RuntimeManager {
 	}
 
 	/** Reads every tracked player's stats now; records finished matches. */
+	/**
+	 * The user's own bot accounts for automatic match tracking: the local main
+	 * and extra bots (local engine), and FNLB bots this server runs (their
+	 * Epic account ID is known once they're logged in through the SDK).
+	 */
+	async userBotAccounts(userId) {
+		const bots = [];
+		const config = await getPlainConfig(userId).catch(() => null);
+		if (!config) return bots;
+		if (config.runtimeMode !== 'fnlb') {
+			const main = this.get(userId).adapter;
+			if (config.deviceAuth?.accountId) {
+				bots.push({ accountId: config.deviceAuth.accountId, displayName: main?.engine === 'fnbr' ? main.client?.user?.self?.displayName || null : null });
+			}
+			for (const account of await listBotAccounts(userId).catch(() => [])) {
+				if (account.accountId && !account.tracker) bots.push({ accountId: account.accountId, displayName: account.displayName || null });
+			}
+		} else {
+			const adapter = this.get(userId).adapter;
+			const cache = adapter?.engine === 'fnlb' ? adapter.manager?.bots?.cache : null;
+			for (const bot of cache?.values?.() || []) {
+				if (bot?.epicId) bots.push({ accountId: bot.epicId, displayName: bot.displayName || null });
+			}
+		}
+		return bots;
+	}
+
 	async pollTrackedPlayers(userId) {
+		await syncBotTracking(userId, await this.userBotAccounts(userId)).catch(() => 0);
 		const source = this.statsSource(userId);
 		if (!source) throw runtimeError(409, 'No bot is running to read stats. Ask an admin to start the server tracker (Admin → Tracker).');
 		const recorded = await pollUserPlayers(userId, (accountId) => source.fetchRawStats(accountId));
@@ -1280,7 +1308,10 @@ export class RuntimeManager {
 	startPlayerTracking(intervalMs = 120000) {
 		if (this.trackingTimer) return;
 		const tick = async () => {
-			for (const userId of await usersWithTrackedPlayers().catch(() => [])) {
+			// Users who track players, plus anyone with a bot running (their
+			// bots are tracked automatically).
+			const users = new Set([...(await usersWithTrackedPlayers().catch(() => [])), ...this.runtimes.keys(), ...this.helpers.keys()]);
+			for (const userId of users) {
 				if (!this.statsSource(userId)) continue;
 				await this.pollTrackedPlayers(userId).catch((error) => this.appendLog(userId, `Player tracking failed: ${error.message}`, 4));
 			}
