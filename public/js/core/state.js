@@ -27,7 +27,13 @@ export const state = {
 	botModal: null, // Bots page settings pop-up: { key: 'main' | bot account id, tab }
 	consoleFilter: 'all',
 	consoleQuery: '',
-	botDefaults: null, // join defaults: { loadout, profile }
+	botDefaults: null,
+	// Banner pickers: data from fortnite-api.com, open picker, picks per form.
+	bannerData: null,
+	bannerError: null,
+	bannerPicker: null,
+	bannerQuery: '',
+	bannerChoice: {}, // join defaults: { loadout, profile }
 	itemSearchQuery: '',
 	itemSearchType: '',
 	// "Use a dummy account" warning shown before opening Epic's code page.

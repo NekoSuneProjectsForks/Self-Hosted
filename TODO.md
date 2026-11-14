@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 137/137 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 139/139 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -214,3 +214,4 @@ modules plus a 167-line wiring file.
 - [x] Matchmaking check (`GET /api/bots/:botId/matchmaking-check`) + Lobby panel
 - [!] Unconfirmed until tested in a real queue. If it still fails, the raw check output is the next thing to look at
 - [x] Server Config page removed; its settings moved to the main bot's Advanced tab (plus Bots → Advanced settings, which also works in FNLB mode). Old `config` links open Bots
+- [x] Banner icon + colour pickers (searchable grids, fortnite-api.com, cached 12 h) on the profile forms

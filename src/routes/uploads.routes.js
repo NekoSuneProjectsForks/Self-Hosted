@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { ReplayUpload, SessionMedia, SessionStat } from '../models/index.js';
 import { getBotSessions, resolveUploadSession } from '../services/sessionHistory.js';
 import { parseReplayFile } from '../services/replayParser.js';
-import { searchFortniteCosmetics } from '../services/fortniteItems.js';
+import { getFortniteBanners, searchFortniteCosmetics } from '../services/fortniteItems.js';
 import { mediaDir, replayDir } from '../lib/paths.js';
 import { asyncRoute, httpError, optionalInteger } from '../http/helpers.js';
 
@@ -131,5 +131,13 @@ export function registerUploadRoutes(ctx) {
 			const items = await searchFortniteCosmetics(query, type);
 			return res.json({ items, source: 'fortnite-api.com' });
 		})
+	);
+
+	// Banner icons and colours for the profile pickers (cached server-side).
+	app.get(
+		'/api/fortnite/banners',
+		requireAuth,
+		requireActive,
+		asyncRoute(async (_req, res) => res.json({ ...(await getFortniteBanners()), source: 'fortnite-api.com' }))
 	);
 }

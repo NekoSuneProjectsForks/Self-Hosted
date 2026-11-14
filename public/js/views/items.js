@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { escapeHtml, icon } from '../core/ui.js';
 import { controlBot, controlOnline, controlledHelper, usingLocalFnbr } from '../core/selectors.js';
+import { bannerFields } from '../core/banners.js';
 
 /** Bot slots fnbr can equip, in the order the loadout is applied. */
 export const LOADOUT_SLOTS = [
@@ -88,7 +89,7 @@ function renderProfile() {
 		<form class="shell-panel rounded-lg p-4" data-form="profile">
 			<p class="font-semibold">Profile: battle pass, banner, crowns</p>
 			<p class="mt-1 text-sm text-zinc-500">What players see on the bot in the lobby. Leave a field empty to keep it as it is. ${live.battlePassLevel ? `Now: level ${escapeHtml(String(live.battlePassLevel))}${live.battlePassPurchased ? ', battle pass owned' : ''}${live.bannerId ? `, banner ${escapeHtml(live.bannerId)}` : ''}.` : ''}</p>
-			<div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+			<div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 				<label><span class="label">Battle pass level</span><input class="input" name="battlePassLevel" type="number" min="1" max="10000" placeholder="${value(defaults.battlePassLevel) || 'e.g. 100'}" /></label>
 				<label><span class="label">Battle pass</span>
 					<select class="input" name="battlePassPurchased">
@@ -97,8 +98,7 @@ function renderProfile() {
 						<option value="false">Not owned</option>
 					</select>
 				</label>
-				<label><span class="label">Banner ID</span><input class="input" name="bannerId" placeholder="${value(defaults.bannerId) || 'e.g. BRSeason01'}" /></label>
-				<label><span class="label">Banner colour</span><input class="input" name="bannerColor" placeholder="${value(defaults.bannerColor) || 'e.g. defaultcolor15'}" /></label>
+				${bannerFields('profile|', { bannerId: defaults.bannerId, bannerColor: defaults.bannerColor })}
 				<label><span class="label">Crowns</span><input class="input" name="crowns" type="number" min="0" max="100000" placeholder="${value(defaults.crowns) || 'e.g. 50'}" /></label>
 			</div>
 			<p class="mt-2 text-xs text-zinc-600">Crowns show when the bot uses the Crowned emote (EID_Coronet).</p>

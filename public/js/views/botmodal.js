@@ -4,6 +4,7 @@ import { runtimeOnline, usingLocalFnbr } from '../core/selectors.js';
 import { epicCodeButton, platformLabel, platformOptions } from '../core/platforms.js';
 import { effectivePlatform, inMainLobby, mainPlatform } from './botlobby.js';
 import { renderConfigForm } from './config.js';
+import { bannerFields } from '../core/banners.js';
 
 const TABS = [
 	['overview', 'gauge', 'Overview'],
@@ -108,8 +109,7 @@ function lookTab(t) {
 					</select>
 				</label>
 				<label><span class="label">Crowns</span><input class="input" name="crowns" type="number" min="0" max="100000" placeholder="${escapeHtml(String(defaults.crowns ?? 'e.g. 50'))}" /></label>
-				<label><span class="label">Banner ID</span><input class="input" name="bannerId" placeholder="${escapeHtml(profile.bannerId || defaults.bannerId || 'e.g. BRSeason01')}" /></label>
-				<label><span class="label">Banner colour</span><input class="input" name="bannerColor" placeholder="${escapeHtml(profile.bannerColor || defaults.bannerColor || 'e.g. defaultcolor15')}" /></label>
+				${bannerFields(`botmodal-profile|${t.botId || ''}`, { bannerId: profile.bannerId || defaults.bannerId, bannerColor: profile.bannerColor || defaults.bannerColor })}
 			</div>
 			<div class="flex flex-wrap gap-2">
 				<button class="btn-primary" type="submit" name="mode" value="live" ${disabled}>${icon('zap')} Apply to this bot now</button>

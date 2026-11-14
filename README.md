@@ -159,7 +159,10 @@ loadout, the join emote and `EID_` DMs. Switch it off, or change the length,
 under **Bot Lobby → Lobby behaviour**.
 
 **Profile** — battle pass level (e.g. 100) and whether the pass is owned, banner
-icon and colour, and crowns (shown with the Crowned emote). **Apply now**
+icon and colour, and crowns (shown with the Crowned emote). **Browse** next to
+the banner fields opens a searchable icon grid and a colour swatch grid
+(from fortnite-api.com via `GET /api/fortnite/banners`, cached for 12 h). IDs can
+still be typed by hand. **Apply now**
 changes the bot for this party; **Save as join default** keeps it.
 
 **Join defaults** — the look every local bot (main and extra) goes back to

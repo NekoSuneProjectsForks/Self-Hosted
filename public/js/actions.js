@@ -367,6 +367,46 @@ document.addEventListener('click', async (event) => {
 			render();
 			return;
 		}
+		// ---- Banner pickers ----
+		if (action === 'banner-picker') {
+			state.bannerPicker = { kind: button.dataset.kind, formKey: button.dataset.formKey };
+			state.bannerQuery = '';
+			render();
+			if (!state.bannerData) {
+				try {
+					state.bannerData = await api('/api/fortnite/banners');
+					state.bannerError = null;
+				} catch (error) {
+					state.bannerError = `Could not load banners: ${error.message}`;
+				}
+				render();
+			}
+			return;
+		}
+		if (action === 'banner-picker-close') {
+			state.bannerPicker = null;
+			render();
+			return;
+		}
+		if (action === 'banner-choose') {
+			const { kind, formKey } = state.bannerPicker || {};
+			const field = kind === 'color' ? 'bannerColor' : 'bannerId';
+			// Keep what's typed in the other banner box.
+			const [formName, botId] = String(formKey || '').split('|');
+			const form = document.querySelector(`form[data-form="${formName}"]${botId ? `[data-bot-id="${CSS.escape(botId)}"]` : ''}`);
+			const other = kind === 'color' ? 'bannerId' : 'bannerColor';
+			const typedOther = form?.querySelector(`[name="${other}"]`)?.value;
+			// Write the pick into the box first, so the re-render keeps it.
+			const box = form?.querySelector(`[name="${field}"]`);
+			if (box) box.value = button.dataset.value;
+			state.bannerChoice = {
+				...state.bannerChoice,
+				[formKey]: { ...(state.bannerChoice[formKey] || {}), [field]: button.dataset.value, ...(typedOther ? { [other]: typedOther } : {}) }
+			};
+			state.bannerPicker = null;
+			render();
+			return;
+		}
 		if (action === 'matchmaking-check') {
 			state.matchmakingCheck = await api(`/api/bots/${encodeURIComponent(activeBotId())}/matchmaking-check`);
 			render();
@@ -709,6 +749,7 @@ document.addEventListener('submit', async (event) => {
 				setToast(result.content, result.failed?.length ? 'error' : 'info');
 			}
 			form.reset();
+			delete state.bannerChoice[`botmodal-profile|${form.dataset.botId || ''}`];
 			render();
 			return;
 		}
@@ -733,6 +774,7 @@ document.addEventListener('submit', async (event) => {
 				setToast(`${helper ? `${helper.label}: ` : ''}${result.content}`, result.failed?.length ? 'error' : 'info');
 			}
 			form.reset();
+			delete state.bannerChoice['profile|'];
 			render();
 			return;
 		}
@@ -1130,6 +1172,11 @@ async function handleAdminAction(action, userId) {
 }
 
 document.addEventListener('keydown', (event) => {
+	if (event.key === 'Escape' && state.bannerPicker) {
+		state.bannerPicker = null;
+		render();
+		return;
+	}
 	if (event.key === 'Escape' && state.epicCodePrompt) closeEpicPrompt();
 	else if (event.key === 'Escape' && state.botModal) {
 		state.botModal = null;
@@ -1206,6 +1253,18 @@ try {
 
 // Console text filter: re-render as you type, keeping focus.
 document.addEventListener('input', (event) => {
+	const bannerQuery = event.target.closest('[data-action="banner-query"]');
+	if (bannerQuery) {
+		state.bannerQuery = bannerQuery.value;
+		const caret = bannerQuery.selectionStart;
+		render();
+		const next = document.querySelector('[data-action="banner-query"]');
+		if (next) {
+			next.focus();
+			next.setSelectionRange(caret, caret);
+		}
+		return;
+	}
 	const query = event.target.closest('[data-action="console-query"]');
 	if (!query) return;
 	state.consoleQuery = query.value;
