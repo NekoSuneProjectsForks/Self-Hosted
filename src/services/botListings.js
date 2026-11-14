@@ -81,46 +81,99 @@ export async function removeListingsForUser(userId) {
 	clearPublicCache();
 }
 
-const ORDER = { available: 0, busy: 1, offline: 2 };
+/**
+ * FNLB's own account state for a user's FNLB bots (matchmaking ban, invalid
+ * login, disabled), cached per owner so the public page doesn't hit FNLB's
+ * API on every visit.
+ */
+const FNLB_INFO_MS = 120000;
+const fnlbInfoCache = new Map();
+
+export async function fnlbBotInfo(userId, { fetchBots = fetchFnlbBots, now = Date.now() } = {}) {
+	const cached = fnlbInfoCache.get(userId);
+	if (cached && now - cached.at < FNLB_INFO_MS) return cached.map;
+	const map = new Map();
+	try {
+		const config = await getPlainConfig(userId);
+		if (config.apiToken) {
+			for (const bot of await fetchBots(config.apiToken)) {
+				map.set(bot.id, {
+					mmsBannedUntil: bot.mmsBannedUntil || null,
+					hasInvalidAuth: Boolean(bot.hasInvalidAuth),
+					isDisabled: Boolean(bot.isDisabled)
+				});
+			}
+		}
+	} catch {
+		// FNLB unreachable: keep the last known answer rather than listing blindly.
+		if (cached) return cached.map;
+	}
+	fnlbInfoCache.set(userId, { at: now, map });
+	return map;
+}
 
 /**
- * Public, read-only rows. `statusOf(userId, engine, botKey)` comes from the
- * runtime manager and returns live status or null when the bot isn't running.
+ * Whether a bot can be offered to the community right now. Only "available"
+ * bots are listed: running, not banned or disabled, and not already in use
+ * (someone in its party, matchmaking or in a match).
  */
-export async function publicBots(statusOf, { now = Date.now() } = {}) {
+export function availability(live, account = null, { now = Date.now() } = {}) {
+	if (account?.isDisabled) return { state: 'disabled', reason: 'Disabled in FNLB.' };
+	if (account?.hasInvalidAuth) return { state: 'banned', reason: "FNLB says the bot's login is invalid (banned or signed out)." };
+	if (account?.mmsBannedUntil && new Date(account.mmsBannedUntil).getTime() > now) {
+		return { state: 'banned', reason: 'Matchmaking ban.', until: account.mmsBannedUntil };
+	}
+	if (!live) return { state: 'offline', reason: 'Not running.' };
+	if (live.banned) return { state: 'banned', reason: live.banReason || 'Banned.' };
+	if (live.status === 'busy') return { state: 'busy', reason: live.busyReason || 'Someone is already using it.' };
+	return { state: 'available', reason: null };
+}
+
+
+/**
+ * Public, read-only rows: ONLY bots that are available right now. Busy,
+ * offline and banned bots are left out (they come back once free) and only
+ * counted. `statusOf(userId, engine, botKey)` is the runtime's live status.
+ */
+export async function publicBots(statusOf, { now = Date.now(), fnlbInfo = fnlbBotInfo } = {}) {
 	if (publicCache.rows && now - publicCache.at < CACHE_MS) return publicCache.rows;
 	const rows = await BotListing.findAll({ where: { isPublic: true } });
 	const owners = await User.findAll({ where: { id: [...new Set(rows.map((row) => row.userId))] }, attributes: ['id', 'status'] });
 	const active = new Set(owners.filter((user) => user.status !== 'suspended').map((user) => user.id));
-	const result = [];
+	const bots = [];
+	const counts = { available: 0, busy: 0 };
 	for (const row of rows) {
 		if (!active.has(row.userId)) continue;
 		let live = null;
 		try {
-			live = statusOf(row.userId, row.engine, row.botKey);
+			live = await statusOf(row.userId, row.engine, row.botKey);
 		} catch {
 			live = null;
 		}
+		const account = row.engine === 'fnlb' ? (await fnlbInfo(row.userId)).get(row.botKey) : null;
+		const { state } = availability(live, account, { now });
 		if (live?.displayName && (live.displayName !== row.displayName || !row.lastSeenAt || now - new Date(row.lastSeenAt).getTime() > 600000)) {
 			await row.update({ displayName: live.displayName, lastSeenAt: new Date(now) }).catch(() => {});
 		}
+		if (state === 'busy') counts.busy += 1;
+		if (state !== 'available') continue;
 		const name = live?.displayName || row.displayName;
-		if (!name) continue; // never published a name yet: nothing useful to show
-		result.push({
+		if (!name) continue;
+		counts.available += 1;
+		bots.push({
 			id: row.id,
 			displayName: name,
 			engine: row.engine,
 			engineLabel: row.engine === 'fnlb' ? 'FNLB bot lobby bot' : 'Lobby bot',
 			botLobbies: row.engine === 'fnlb',
-			status: live?.status || 'offline',
+			status: 'available',
 			partySize: live?.partySize ?? null,
 			partyMax: live?.partyMax ?? null,
 			platform: live?.platform || null,
-			description: row.description || '',
-			lastSeenAt: live ? new Date(now).toISOString() : row.lastSeenAt
+			description: row.description || ''
 		});
 	}
-	result.sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.displayName.localeCompare(b.displayName));
-	publicCache = { at: now, rows: result };
-	return result;
+	bots.sort((a, b) => a.displayName.localeCompare(b.displayName));
+	publicCache = { at: now, rows: { bots, counts } };
+	return publicCache.rows;
 }

@@ -3,8 +3,7 @@
  * chose to publish and how to use them. There are no controls here.
  */
 const root = document.getElementById('community');
-let data = { bots: [], counts: { total: 0, available: 0, busy: 0 } };
-let filter = 'all';
+let data = { bots: [], counts: { available: 0, busy: 0 } };
 let query = '';
 let error = '';
 
@@ -21,23 +20,10 @@ function icon(name, classes = 'h-4 w-4') {
 	return `<i data-lucide="${name}" class="${classes}"></i>`;
 }
 
-const BADGE = {
-	available: ['border-fnlb-400/40 bg-fnlb-500/15 text-fnlb-300', 'Available'],
-	busy: ['border-amber-400/40 bg-amber-500/10 text-amber-200', 'In a party'],
-	offline: ['border-zinc-600/40 bg-zinc-500/10 text-zinc-300', 'Offline']
-};
-
-function ago(value) {
-	if (!value) return '';
-	const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
-	if (minutes < 2) return 'just now';
-	if (minutes < 60) return `${minutes} min ago`;
-	const hours = Math.round(minutes / 60);
-	return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} days ago`;
-}
+// The server only sends bots that are free right now (running, not banned,
+// nobody in their party). Busy bots are only counted.
 
 function card(bot) {
-	const [badgeClass, badgeText] = BADGE[bot.status] || BADGE.offline;
 	return `
 		<article class="shell-panel flex flex-col gap-3 rounded-xl p-4">
 			<div class="flex items-start justify-between gap-3">
@@ -48,13 +34,12 @@ function card(bot) {
 						<p class="text-xs text-zinc-500">${esc(bot.engineLabel)}</p>
 					</div>
 				</div>
-				<span class="badge ${badgeClass}">${badgeText}</span>
+				<span class="badge border-fnlb-400/40 bg-fnlb-500/15 text-fnlb-300">Available</span>
 			</div>
 			${bot.description ? `<p class="text-sm text-zinc-300">${esc(bot.description)}</p>` : ''}
 			<div class="flex flex-wrap gap-2 text-xs">
 				${bot.botLobbies ? `<span class="chip border-fnlb-400/30 text-fnlb-200">${icon('swords', 'h-3 w-3')} Bot lobbies</span>` : `<span class="chip">${icon('sparkles', 'h-3 w-3')} Lobby bot</span>`}
-				${bot.status !== 'offline' && bot.partySize ? `<span class="chip">${icon('users', 'h-3 w-3')} ${bot.partySize}/${bot.partyMax || 16}</span>` : ''}
-				${bot.status === 'offline' && bot.lastSeenAt ? `<span class="chip">Seen ${esc(ago(bot.lastSeenAt))}</span>` : ''}
+				<span class="chip">${icon('circle-check', 'h-3 w-3')} Free now</span>
 			</div>
 			<div class="mt-auto flex gap-2">
 				<button class="btn-secondary flex-1" data-copy="${esc(bot.displayName)}">${icon('copy')} Copy name</button>
@@ -64,9 +49,9 @@ function card(bot) {
 
 function render() {
 	const q = query.toLowerCase();
-	const bots = data.bots.filter((bot) => (filter === 'all' || bot.status === filter) && (!q || bot.displayName.toLowerCase().includes(q)));
-	const tab = (id, label, count) =>
-		`<button class="tab ${filter === id ? 'active' : ''}" data-filter="${id}">${label}${count === undefined ? '' : ` <span class="text-xs text-zinc-500">${count}</span>`}</button>`;
+	const bots = data.bots.filter((bot) => !q || bot.displayName.toLowerCase().includes(q));
+	const available = data.counts?.available ?? data.bots.length;
+	const busy = data.counts?.busy ?? 0;
 	root.innerHTML = `
 		<div class="mx-auto max-w-6xl p-4 sm:p-8">
 			<header class="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -91,12 +76,10 @@ function render() {
 			</section>
 
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-				<nav class="flex flex-wrap gap-2">
-					${tab('all', 'All', data.counts.total)}
-					${tab('available', 'Available', data.counts.available)}
-					${tab('busy', 'In a party', data.counts.busy)}
-					${tab('offline', 'Offline')}
-				</nav>
+				<p class="flex flex-wrap items-center gap-3 text-sm">
+					<span class="badge border-fnlb-400/40 bg-fnlb-500/15 text-fnlb-300">${available} available</span>
+					${busy ? `<span class="text-zinc-500">${busy} more in use right now. They show up again when they're free.</span>` : ''}
+				</p>
 				<input class="input max-w-xs" data-search placeholder="Search bots" value="${esc(query)}" />
 			</div>
 
@@ -104,7 +87,7 @@ function render() {
 			${
 				bots.length
 					? `<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${bots.map(card).join('')}</div>`
-					: `<div class="shell-panel rounded-xl p-8 text-center text-sm text-zinc-500">${data.bots.length ? 'No bots match.' : 'No community bots yet. Members can publish theirs from their Bots page.'}</div>`
+					: `<div class="shell-panel rounded-xl p-8 text-center text-sm text-zinc-500">${data.bots.length ? 'No bots match.' : busy ? 'Every community bot is in use right now. Check back in a few minutes; this page updates by itself.' : 'No community bots are online right now.'}</div>`
 			}
 			<p class="mt-6 text-center text-xs text-zinc-600">Updates every 30 seconds. Not affiliated with Epic Games.</p>
 		</div>`;
@@ -124,12 +107,6 @@ async function load() {
 }
 
 root.addEventListener('click', async (event) => {
-	const tab = event.target.closest('[data-filter]');
-	if (tab) {
-		filter = tab.dataset.filter;
-		render();
-		return;
-	}
 	const copy = event.target.closest('[data-copy]');
 	if (copy) {
 		try {

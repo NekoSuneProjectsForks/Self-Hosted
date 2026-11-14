@@ -171,6 +171,14 @@ export function localLocked() {
 	return state.serverInfo?.localEngineAdminOnly !== false && state.user?.role !== 'admin';
 }
 
+/** Why a public bot is or isn't on the community page right now. */
+function listingState(bot) {
+	if (bot.state === 'available') return `<p class="mt-1 text-xs text-fnlb-300">${icon('circle-check', 'inline h-3 w-3')} On the community page now</p>`;
+	const until = bot.until ? ` until ${escapeHtml(new Date(bot.until).toLocaleString())}` : '';
+	const label = { busy: 'Hidden while in use', offline: 'Hidden while offline', banned: 'Hidden: banned', disabled: 'Hidden: disabled' }[bot.state] || 'Hidden';
+	return `<p class="mt-1 text-xs ${bot.state === 'banned' || bot.state === 'disabled' ? 'text-red-300' : 'text-amber-200'}">${icon('eye-off', 'inline h-3 w-3')} ${label}${until}${bot.reason ? ` · ${escapeHtml(bot.reason)}` : ''}</p>`;
+}
+
 /** Community listing: each bot Public (on /community) or Private. */
 function communityPanel() {
 	const data = state.listings;
@@ -181,6 +189,7 @@ function communityPanel() {
 				<div class="min-w-0">
 					<p class="truncate font-semibold">${escapeHtml(bot.name)}</p>
 					<p class="text-xs text-zinc-500">${escapeHtml(bot.note)}${bot.online ? ' · online' : ''}</p>
+					${bot.isPublic ? listingState(bot) : ''}
 				</div>
 				<div class="flex rounded-lg border border-white/10 p-0.5 text-xs" role="group" aria-label="Visibility">
 					<button class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ${!bot.isPublic ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}" data-action="listing-visibility" data-engine="${escapeHtml(bot.engine)}" data-key="${escapeHtml(bot.botKey)}" data-name="${escapeHtml(bot.name)}" data-public="false">${icon('lock', 'h-3.5 w-3.5')} Private</button>
@@ -203,7 +212,7 @@ function communityPanel() {
 			<div class="mb-3 flex flex-wrap items-start justify-between gap-2">
 				<div>
 					<p class="flex items-center gap-2 font-semibold">${icon('globe')} Community listing</p>
-					<p class="mt-1 text-sm text-zinc-500"><b>Public</b> bots appear on the <a class="text-fnlb-300 underline" href="/community" target="_blank" rel="noopener">community page</a> (no login needed), so anyone can add them and use them in a party. <b>Private</b> bots are yours only. The page only shows the name, status and your note: nobody else gets your friends, DMs, skins or settings.</p>
+					<p class="mt-1 text-sm text-zinc-500"><b>Public</b> bots appear on the <a class="text-fnlb-300 underline" href="/community" target="_blank" rel="noopener">community page</a> (no login needed), so anyone can add them and use them in a party. <b>Private</b> bots are yours only. It only lists a public bot while it's <b>running, not banned and free</b>: once someone has it in their party (or it's in a match) it's hidden until it's free again. The page only shows the name and your note: nobody else gets your friends, DMs, skins or settings.</p>
 				</div>
 				<a class="btn-secondary" href="/community" target="_blank" rel="noopener">${icon('external-link')} Open page</a>
 			</div>

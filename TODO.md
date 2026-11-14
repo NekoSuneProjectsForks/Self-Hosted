@@ -236,4 +236,6 @@ modules plus a 167-line wiring file.
 - [x] FNLB engine friends + DMs via the fnlb SDK bridge (Events.FriendMessage in, bot.whisper out; acceptFriend/declineFriend/addFriend/removeFriend/block/unblock locally with cloud-command fallback). friendMessages capability now true for fnlb
 - [x] Community bot list: /community public read-only page + /api/public/bots (cached 20s); per-bot Public/Private + note on Bots page (BotListing; ownership checked; suspended owners hidden)
 - [x] Local engine admin-only (Admin → Server, default on): start/helpers/config blocked for members, members auto-moved to FNLB; FNLB features untouched
+- [x] Community list shows only available bots: running + not banned (FNLB mmsBannedUntil / invalid auth / disabled, cached 2 min per owner) + free (party size 1; local: not matchmaking/in match). Busy ones hidden until free and only counted; owners see the reason
+- [ ] Local engine bans: Epic doesn't expose MMS bans to fnbr; a banned local account just fails to log in (shows offline)
 - [!] "Bot doesn't see me join" when the bot leads (e.g. it stayed behind after the crash): likely the 42.x bot-as-captain lobby issue (Fortnite-LobbyBot/fnbr.js#11). Workaround: the player leads and invites the bot

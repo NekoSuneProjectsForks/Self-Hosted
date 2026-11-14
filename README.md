@@ -420,10 +420,13 @@ why bot lobbies need the Legacy FNLB engine.
 **`/community`** is a public page (no login) listing bots their owners chose
 to share. Each member decides per bot on **Bots → Community listing**:
 
-- **Public**: shown on the community page with its name, live status
-  (Available, In a party, Offline), party size, type (FNLB bot lobby bot or
-  lobby bot) and an optional note (160 characters). Anyone can add it as a
-  friend and invite it.
+- **Public**: shown on the community page **only while it's available**:
+  running, not banned and free. Hidden while offline; while busy (anyone else
+  in its party, or, for local bots, matchmaking or in a match) until it's free
+  again; while FNLB reports a matchmaking ban (until it ends), an invalid
+  login or the bot as disabled. The page shows the name, type (FNLB bot lobby
+  bot or lobby bot) and an optional note (160 characters), plus a count of
+  busy bots. Owners see on their Bots page why a public bot is hidden.
 - **Private** (default): only the owner uses it.
 
 The public page is read-only. It never shows owners, emails or account IDs,

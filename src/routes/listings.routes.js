@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { asyncRoute } from '../http/helpers.js';
 import { publicDir } from '../lib/paths.js';
-import { listMyListings, publicBots, setListing } from '../services/botListings.js';
+import { availability, fnlbBotInfo, listMyListings, publicBots, setListing } from '../services/botListings.js';
 import { getPlainConfig } from '../services/configStore.js';
 import { listBotAccounts } from '../services/botAccounts.js';
 import { fetchFnlbBots } from '../services/fnlbApi.js';
@@ -21,15 +21,9 @@ export function registerListingRoutes(ctx) {
 		'/api/public/bots',
 		asyncRoute(async (_req, res) => {
 			res.set('Cache-Control', 'public, max-age=15');
-			const bots = await publicBots((userId, engine, botKey) => runtime.publicBotStatus(userId, engine, botKey));
-			return res.json({
-				bots,
-				counts: {
-					total: bots.length,
-					available: bots.filter((bot) => bot.status === 'available').length,
-					busy: bots.filter((bot) => bot.status === 'busy').length
-				}
-			});
+			// Only free, running, unbanned bots; busy ones are just counted.
+			const { bots, counts } = await publicBots((userId, engine, botKey) => runtime.publicBotStatus(userId, engine, botKey));
+			return res.json({ bots, counts });
 		})
 	);
 
@@ -43,7 +37,12 @@ export function registerListingRoutes(ctx) {
 			if (!botKey) return;
 			const listing = saved.get(`${engine}:${botKey}`);
 			const live = runtime.publicBotStatus(userId, engine, botKey);
+			const account = engine === 'fnlb' ? fnlbAccounts.get(botKey) : null;
+			const { state, reason, until } = availability(live, account);
 			rows.push({
+				state,
+				reason,
+				until: until || null,
 				engine,
 				botKey,
 				name: live?.displayName || listing?.displayName || name || botKey,
@@ -54,6 +53,7 @@ export function registerListingRoutes(ctx) {
 			});
 		};
 		const config = await getPlainConfig(userId);
+		const fnlbAccounts = config.apiToken ? await fnlbBotInfo(userId) : new Map();
 		if (await localEngineAllowed(user)) {
 			add('fnbr', config.deviceAuth?.accountId, null, 'Main bot (local engine)');
 			for (const account of await listBotAccounts(userId)) {

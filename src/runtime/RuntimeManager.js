@@ -631,9 +631,11 @@ export class RuntimeManager {
 			const client = adapter?.client;
 			if (!client?.isReady) return null;
 			const size = client.party?.size ?? 1;
+			const inSession = adapter.matchState && adapter.matchState !== 'lobby';
 			return {
 				displayName: client.user?.self?.displayName || null,
-				status: size > 1 ? 'busy' : 'available',
+				status: size > 1 || inSession ? 'busy' : 'available',
+				busyReason: inSession ? 'In a match or matchmaking.' : size > 1 ? `In a party (${size}/${client.party?.maxSize ?? 16}).` : null,
 				partySize: size,
 				partyMax: client.party?.maxSize ?? 16,
 				platform: adapter.startConfig?.platform || null
@@ -650,9 +652,15 @@ export class RuntimeManager {
 			} catch {
 				size = null;
 			}
+			// SDK bot flags: 1 disabled, 4 invalid auth (banned or signed out).
+			const flags = Number(bot.flags || 0);
+			const banned = (flags & 1) === 1 || (flags & 4) === 4;
 			return {
 				displayName: bot.displayName || null,
 				status: size && size > 1 ? 'busy' : 'available',
+				busyReason: size && size > 1 ? `In a party (${size}/16).` : null,
+				banned,
+				banReason: (flags & 4) === 4 ? 'Invalid login (banned or signed out).' : (flags & 1) === 1 ? 'Disabled in FNLB.' : null,
 				partySize: size,
 				partyMax: 16,
 				platform: null
