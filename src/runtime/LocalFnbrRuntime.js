@@ -947,15 +947,18 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const { member } = this.requireMember();
 		await member.setReadiness(Boolean(ready));
 		// A manual ready/unready takes over from auto-ready until the humans
-		// change readiness again.
+		// change readiness again (and from sit-out until the bot changes party).
 		this.autoReadied = auto && Boolean(ready);
+		if (!auto) this.manualReadiness = true;
 		this.emitParty();
 		return { content: ready ? 'Bot marked ready.' : 'Bot marked not ready.', format: 1, source: 'fnbr' };
 	}
 
-	async setSittingOut(sittingOut) {
+	async setSittingOut(sittingOut, { auto = false } = {}) {
 		const { member } = this.requireMember();
 		await member.setSittingOut(Boolean(sittingOut));
+		// A manual change (dashboard / command) wins until the bot changes party.
+		if (!auto) this.manualReadiness = true;
 		this.emitParty();
 		return { content: sittingOut ? 'Bot is sitting out.' : 'Bot is no longer sitting out.', format: 1, source: 'fnbr' };
 	}
@@ -977,6 +980,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const partyId = this.client?.party?.id;
 		if (!partyId || !this.client?.isReady || partyId === this.defaultsPartyId) return;
 		this.defaultsPartyId = partyId;
+		this.manualReadiness = false;
 		// Let the join settle before patching our member meta.
 		if (this.defaultsTimer) clearTimeout(this.defaultsTimer);
 		this.defaultsTimer = setTimeout(() => {
@@ -1129,6 +1133,16 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			for (const row of result.failed || []) failed.push({ slot: row.key, error: row.error });
 		}
 
+		// Sit out so the party can queue (see sitOutMode).
+		if (this.sitOutMode() && typeof member.setSittingOut === 'function' && !safeValue(() => member.isSittingOut, false)) {
+			try {
+				await member.setSittingOut(true);
+				applied.push({ slot: 'sitOut' });
+			} catch (error) {
+				failed.push({ slot: 'sitOut', error: error.message });
+			}
+		}
+
 		// Privacy is the leader's call; in someone else's party just skip it.
 		if (categoryConfig?.privacy && member.isLeader) {
 			await this.setPrivacy(categoryConfig.privacy).catch((error) =>
@@ -1276,6 +1290,30 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	 * counts as done), and unreadies it again when one of them backs out.
 	 * It only undoes a ready it set itself, so a manual !ready is kept.
 	 */
+	/**
+	 * Bots can't load into a match. A Ready bot is counted as a player who then
+	 * never connects, so matchmaking fails ("can't find a match"). Sitting out
+	 * keeps the bot in the lobby while the rest of the party queues. On by
+	 * default; auto-ready is only used when this is switched off.
+	 */
+	sitOutMode() {
+		return this.startConfig.localCategory?.config?.botsSitOut !== false;
+	}
+
+	ensureSittingOut() {
+		if (!this.sitOutMode() || this.manualReadiness || this.sittingOutSyncing) return;
+		const me = this.client?.party?.me;
+		if (!me || !this.client?.isReady) return;
+		if (safeValue(() => me.isSittingOut, false)) return;
+		this.sittingOutSyncing = true;
+		this.setSittingOut(true, { auto: true })
+			.then(() => this.log('Sitting out so the party can matchmake (bots cannot play matches).', 2))
+			.catch((error) => this.log(`Could not sit out: ${error.message}`, 4))
+			.finally(() => {
+				this.sittingOutSyncing = false;
+			});
+	}
+
 	/** True when every player in the lobby is ready (sitting out counts as done). */
 	everyoneReady() {
 		const humans = this.humanMembers();
@@ -1285,6 +1323,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 	}
 
 	syncReadiness() {
+		if (this.sitOutMode()) return this.ensureSittingOut();
 		if (!this.autoReadyEnabled() || this.readySyncing) return;
 		const me = this.client?.party?.me;
 		if (!me || !this.client?.isReady) return;
@@ -1329,6 +1368,12 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		const authorId = message.author?.id;
 		if (!authorId || authorId === this.client?.user?.self?.id || this.isTrusted(authorId)) return;
 		const command = String(message.content ?? '').trim().toLowerCase();
+		if ((command === '!ready' || command === '!unready') && this.sitOutMode()) {
+			// Readying would stop the party from finding a match.
+			return this.client?.party
+				?.sendMessage('Bots sit out so you can matchmake. Ready up and start: the bots stay in the lobby.')
+				.catch(() => {});
+		}
 		if (command === '!ready') return this.setReadiness(true);
 		if (command === '!unready') return this.setReadiness(false);
 		if (command === '!sitout') return this.setSittingOut(true);

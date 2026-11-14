@@ -222,7 +222,7 @@ describe('auto-ready', () => {
 			client.party.me.isReady = ready;
 		};
 		client.party.members = new Map([['bot', client.party.me], ...humans.map((m) => [m.id, m])]);
-		const runtime = runtimeFor(client, { trustedIds: () => trusted, config });
+		const runtime = runtimeFor(client, { trustedIds: () => trusted, config: { botsSitOut: false, ...config } });
 		runtime.readyDelayMs = 5;
 		return { client, runtime };
 	}
@@ -286,9 +286,9 @@ describe('auto-ready', () => {
 describe('lobby chat commands', () => {
 	const chat = (content, id = 'p1') => ({ author: { id }, content });
 
-	it('!ready in lobby chat readies the bot', async () => {
+	it('!ready in lobby chat readies the bot when sit-out is off', async () => {
 		const client = fakeClient('bot');
-		await runtimeFor(client).handlePartyCommand(chat('!ready'));
+		await runtimeFor(client, { config: { botsSitOut: false } }).handlePartyCommand(chat('!ready'));
 		assert.deepEqual(client.calls[0], ['setReadiness', true]);
 	});
 
@@ -337,7 +337,7 @@ describe('auto-ready event timing (fnbr emits before updating)', () => {
 		};
 		const player = { id: 'p1', isReady: false };
 		client.party.members = new Map([['bot', client.party.me], ['p1', player]]);
-		const runtime = runtimeFor(client);
+		const runtime = runtimeFor(client, { config: { botsSitOut: false } });
 		runtime.readyDelayMs = 5;
 		runtime.bindEvents(client);
 
@@ -372,7 +372,7 @@ describe('auto-ready event timing (fnbr emits before updating)', () => {
 			['p2', { id: 'p2', isReady: true }],
 			['p3', { id: 'p3', isReady: false }]
 		]);
-		const runtime = runtimeFor(client);
+		const runtime = runtimeFor(client, { config: { botsSitOut: false } });
 		runtime.readyDelayMs = 5;
 		runtime.syncReadiness();
 		await new Promise((resolve) => setTimeout(resolve, 30));
@@ -570,5 +570,64 @@ describe('copy a player\'s look', () => {
 		const client = partyWithPlayer({ id: 'p1', displayName: 'P', outfit: 'CID_9' });
 		await runtimeFor(client).handlePartyCommand({ author: { id: 'p1' }, content: '!copy' });
 		assert.deepEqual(client.calls[0], ['setOutfit', 'CID_9']);
+	});
+});
+
+describe('bots sit out so the party can matchmake', () => {
+	function sitOutClient() {
+		const client = fakeClient('bot');
+		client.party.me.id = 'bot';
+		client.party.me.isSittingOut = false;
+		client.party.me.isReady = false;
+		client.party.me.setSittingOut = async (value) => {
+			client.calls.push(['setSittingOut', value]);
+			client.party.me.isSittingOut = value;
+		};
+		client.party.me.setReadiness = async (value) => client.calls.push(['setReadiness', value]);
+		client.party.sendMessage = async (text) => client.calls.push(['partyMessage', text]);
+		client.party.members = new Map([['bot', client.party.me], ['p1', { id: 'p1', isReady: true }]]);
+		return client;
+	}
+	const wait = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+	it('sits out instead of readying when everyone is ready (default)', async () => {
+		const client = sitOutClient();
+		runtimeFor(client).syncReadiness();
+		await wait();
+		assert.deepEqual(client.calls, [['setSittingOut', true]]);
+	});
+
+	it('never readies in sit-out mode', async () => {
+		const client = sitOutClient();
+		const runtime = runtimeFor(client);
+		runtime.readyDelayMs = 1;
+		runtime.syncReadiness();
+		await wait();
+		runtime.syncReadiness();
+		await wait();
+		assert.equal(client.calls.some((c) => c[0] === 'setReadiness'), false);
+	});
+
+	it('sits out when it lands in a new party', async () => {
+		const client = sitOutClient();
+		client.party.me.meta = {};
+		await runtimeFor(client).applyCategory({});
+		assert.deepEqual(client.calls[0], ['setSittingOut', true]);
+	});
+
+	it('respects a manual "stop sitting out" until the bot changes party', async () => {
+		const client = sitOutClient();
+		const runtime = runtimeFor(client);
+		await runtime.setSittingOut(false);
+		runtime.syncReadiness();
+		await wait();
+		assert.deepEqual(client.calls, [['setSittingOut', false]]);
+	});
+
+	it('!ready in lobby chat explains instead of readying', async () => {
+		const client = sitOutClient();
+		await runtimeFor(client).handlePartyCommand({ author: { id: 'p1' }, content: '!ready' });
+		assert.equal(client.calls[0][0], 'partyMessage');
+		assert.equal(client.calls.some((c) => c[0] === 'setReadiness'), false);
 	});
 });

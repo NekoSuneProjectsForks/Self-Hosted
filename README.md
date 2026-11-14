@@ -250,6 +250,16 @@ Friends can message any local bot (main or extra):
 Messages between your own bots are ignored, so two bots can never get into a
 loop.
 
+### Matchmaking: bots sit out
+
+Bots can't load into a match. A bot marked **Ready** counts as a player that
+then never connects, so the party can't find a match. By default every bot
+**sits out** whenever it starts or lands in a party, and stays sitting out: just
+ready up and start, and the bots wait in the lobby. A manual "Stop sitting out"
+is respected until the bot changes party. Switch this off under **Lobby
+behaviour → Sit out of matches** to use auto-ready instead (not recommended).
+In sit-out mode, `!ready` in lobby chat gets an explanation instead of readying.
+
 ### Auto-ready and lobby chat commands
 
 - **Auto-ready**: every bot readies up once every player in the lobby is ready,

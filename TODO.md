@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 120/120 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 125/125 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -205,3 +205,6 @@ modules plus a 167-line wiring file.
 - [x] Main bot platform/status saved via `PATCH /api/config/main-bot` (a narrow save that can't reset other switches)
 - [x] Oversized icons: the committed `public/styles.css` was stale (no `.h-3` etc.), so hosts that skip `npm run build` lost sizing. Rebuilt and committed, plus a `:where(svg.lucide)` fallback. Added the missing `fnlb-100/200/600` shades
 - [x] Re-renders keep half-typed form fields and focus
+- [x] "Can't find a match": a Ready bot is counted as a player that never connects. Bots now sit out by default (`botsSitOut`) on start, on every new party, and on readiness changes; auto-ready only when sit-out is off
+- [x] Kick/Promote only shown when the controlled bot leads the party, never on the bot's own card
+- [x] Server Config has a Bot accounts manager (list, edit in the settings pop-up, delete, add)

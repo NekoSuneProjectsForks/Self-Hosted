@@ -33,7 +33,16 @@ export function pushApiResponse(response) {
 
 export async function refreshAfterAuth() {
 	await loadMe();
-	await Promise.all([loadLogs(), loadQuickCommands(), loadBotAccounts(false).catch(() => {})]);
+	await Promise.all([
+		loadLogs(),
+		loadQuickCommands(),
+		loadBotAccounts(false).catch(() => {}),
+		api('/api/bot-lobby/settings')
+			.then((data) => {
+				state.lobbySettings = data.settings;
+			})
+			.catch(() => {})
+	]);
 	if (state.user?.role === 'admin') await loadAdmin();
 	if (dashboardAvailable()) await loadDashboard(false).catch((error) => setToast(error.message, 'error'));
 	connectSocket();
@@ -65,6 +74,7 @@ document.addEventListener('click', async (event) => {
 		state.view = view;
 		try {
 			if (view === 'admin') await loadAdmin();
+			if (view === 'config') await loadBotAccounts(false).catch(() => {});
 			if ((view === 'status' || view === 'categories' || view === 'items') && !state.dashboard) await loadDashboard(false);
 			if (view === 'items' && usingLocalFnbr()) {
 				state.botDefaults = await api('/api/bot-defaults').catch(() => null);
@@ -210,7 +220,7 @@ document.addEventListener('click', async (event) => {
 
 		// ---- Bot settings pop-up ----
 		if (action === 'bot-settings') {
-			state.botModal = { key: button.dataset.botKey, tab: 'overview' };
+			state.botModal = { key: button.dataset.botKey, tab: button.dataset.tab || 'overview' };
 			render();
 			return;
 		}

@@ -172,9 +172,11 @@ describe('LocalFnbrRuntime cosmetics', () => {
 			startOutfit: [{ id: 'CID_1' }],
 			startPickaxe: [{ id: 'PID_BAD' }]
 		});
-		assert.equal(result.applied.length, 1);
-		assert.equal(result.failed.length, 1);
-		assert.equal(result.failed[0].slot, 'pickaxe');
+		// Sitting out (for matchmaking) is reported too; only count cosmetics here.
+		const cosmetic = (row) => ['outfit', 'backpack', 'pickaxe', 'shoes', 'emote'].includes(row.slot);
+		assert.equal(result.applied.filter(cosmetic).length, 1);
+		assert.equal(result.failed.filter(cosmetic).length, 1);
+		assert.equal(result.failed.find(cosmetic).slot, 'pickaxe');
 	});
 });
 

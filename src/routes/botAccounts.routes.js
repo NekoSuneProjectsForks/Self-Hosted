@@ -9,7 +9,7 @@ import {
 import { asyncRoute, httpError } from '../http/helpers.js';
 import { getPlainConfig, updateLocalCategoryConfig } from '../services/configStore.js';
 
-const LOBBY_SETTINGS = ['autoReady', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
+const LOBBY_SETTINGS = ['botsSitOut', 'autoReady', 'partyCommands', 'dmCommands', 'emotePlayOnce', 'acceptInvites', 'acceptFriendRequests'];
 
 function settingsOf(config = {}) {
 	const seconds = Number(config.emoteSeconds);

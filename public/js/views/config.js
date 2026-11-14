@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
-import { epicCodeButton, platformOptions } from '../core/platforms.js';
-import { escapeHtml, icon } from '../core/ui.js';
+import { epicCodeButton, platformLabel, platformOptions } from '../core/platforms.js';
+import { addForm } from './botlobby.js';
+import { escapeHtml, icon, statusBadge } from '../core/ui.js';
 
 // Browsers and password managers autofill any password field, which would
 // silently submit a stale one-time code or token on the next save.
@@ -148,5 +149,51 @@ export function renderConfig() {
 				<button class="btn-primary w-full" type="submit">${icon('save')} Save Config</button>
 			</aside>
 		</form>
+		${engine === 'fnbr' ? renderBotAccounts() : ''}
 	`;
+}
+
+/** Create, edit and delete extra bot accounts (also reachable from the Bots page). */
+function renderBotAccounts() {
+	const accounts = state.botAccounts || [];
+	const rows = accounts
+		.map((account) => {
+			const id = escapeHtml(account.id);
+			return `
+			<tr class="border-t border-white/5">
+				<td class="py-2 pr-3 font-medium text-zinc-100">${escapeHtml(account.label)}</td>
+				<td class="py-2 pr-3 text-zinc-400">${escapeHtml(account.displayName || account.accountId || (account.authorizationCodeConfigured ? 'Code saved, not signed in' : 'Not signed in'))}</td>
+				<td class="py-2 pr-3 text-zinc-400">${escapeHtml(platformLabel(account.platform || config().platform || 'WIN'))}${account.platform ? '' : ' <span class="text-zinc-600">(main)</span>'}</td>
+				<td class="py-2 pr-3">${statusBadge(account.status)}</td>
+				<td class="py-2 pr-3 text-zinc-400">${account.autoStart ? 'Yes' : 'No'}</td>
+				<td class="py-2 text-right">
+					<div class="inline-flex gap-2">
+						<button class="btn-secondary py-1.5" type="button" data-action="bot-settings" data-bot-key="${id}" data-tab="account">${icon('pencil')} Edit</button>
+						<button class="btn-danger py-1.5" type="button" data-action="botacc-delete" data-account-id="${id}">${icon('trash-2')} Delete</button>
+					</div>
+				</td>
+			</tr>`;
+		})
+		.join('');
+	return `
+		<section class="mt-4 grid gap-4">
+			<div class="shell-panel rounded-xl p-4">
+				<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+					<p class="font-semibold">Bot accounts</p>
+					<button class="btn-secondary py-1.5" type="button" data-view="bots">${icon('bot')} Open Bots page</button>
+				</div>
+				<p class="mt-1 text-sm text-zinc-500">Extra Epic accounts that run next to the main bot. The main bot's own sign-in is in the form above. Edit opens the bot's settings.</p>
+				${accounts.length
+					? `<div class="mt-3 overflow-x-auto"><table class="w-full text-left text-sm">
+						<thead class="text-xs uppercase text-zinc-500"><tr><th class="py-2 pr-3 font-semibold">Label</th><th class="py-2 pr-3 font-semibold">Epic account</th><th class="py-2 pr-3 font-semibold">Platform</th><th class="py-2 pr-3 font-semibold">Status</th><th class="py-2 pr-3 font-semibold">Auto-start</th><th></th></tr></thead>
+						<tbody>${rows}</tbody>
+					</table></div>`
+					: '<p class="mt-3 text-sm text-zinc-500">No extra bots yet. Add one below.</p>'}
+			</div>
+			${addForm()}
+		</section>`;
+}
+
+function config() {
+	return state.config || {};
 }

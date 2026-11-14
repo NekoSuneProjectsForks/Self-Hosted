@@ -32,7 +32,7 @@ export function currentMatchState() {
 	return activeBot()?.matchState || 'lobby';
 }
 
-function memberCard(member, leaderId) {
+function memberCard(member, leaderId, botIsLeader) {
 	const isLeader = member.isLeader || member.id === leaderId;
 	const botId = controlBotId();
 	const isThisBot = member.id === botId;
@@ -79,7 +79,9 @@ function memberCard(member, leaderId) {
 				: ''}
 			${memberStats(member)}
 			${
-				can('party') && !isLeader
+				// Only the leader can kick or promote. Show these only when the bot
+				// leads, and never on the bot's own card.
+				can('party') && botIsLeader && !isThisBot && !isLeader
 					? `<div class="mt-3 flex flex-wrap gap-2">
 							<button class="btn-secondary" data-action="party-kick" data-member-id="${escapeHtml(member.id)}">${icon('user-minus')} Kick</button>
 							${can('promoteMember') ? `<button class="btn-secondary" data-action="party-promote" data-member-id="${escapeHtml(member.id)}">${icon('crown')} Promote</button>` : ''}
@@ -176,7 +178,7 @@ export function renderLobby() {
 			<section>
 				<h2 class="mb-3 text-sm font-semibold uppercase text-zinc-500">Party members (${members.length})</h2>
 				<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-					${members.map((member) => memberCard(member, party.leader?.id)).join('') || '<p class="text-sm text-zinc-500">No members.</p>'}
+					${members.map((member) => memberCard(member, party.leader?.id, isLeader)).join('') || '<p class="text-sm text-zinc-500">No members.</p>'}
 				</div>
 			</section>
 
@@ -197,7 +199,11 @@ function renderLobbyControls(isLeader) {
 		<section class="shell-panel rounded-lg p-4">
 			<p class="mb-3 font-semibold">Lobby controls</p>
 			${leaderNote}
-			${can('autoReady') ? `<p class="mb-3 text-xs text-zinc-500">${icon('check-check', 'mr-1 inline h-3.5 w-3.5 align-[-2px]')} ${state.config?.localCategory?.config?.autoReady === false ? 'Auto-ready is off.' : 'Auto-ready is on: the bots ready up once every player is ready. Players can also type <code>!ready</code> / <code>!unready</code> in lobby chat.'}</p>` : ''}
+			${can('autoReady') ? `<p class="mb-3 text-xs text-zinc-500">${icon('check-check', 'mr-1 inline h-3.5 w-3.5 align-[-2px]')} ${state.lobbySettings?.botsSitOut === false
+					? state.lobbySettings?.autoReady === false
+						? 'Sit-out and auto-ready are off: set the bot\'s readiness yourself.'
+						: 'Auto-ready is on: the bots ready after every player. Heads-up: a Ready bot can stop the party finding a match.'
+					: 'Bots sit out so your party can matchmake: just ready up and start. Bots can\'t play matches, so a Ready bot would make matchmaking fail.'}</p>` : ''}
 			<div class="flex flex-wrap gap-2">
 				${can('readiness') ? `
 					<button class="btn-secondary" data-action="party-ready">${icon('check')} Ready</button>

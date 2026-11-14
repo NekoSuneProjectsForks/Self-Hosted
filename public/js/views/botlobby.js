@@ -97,7 +97,7 @@ function accountTile(account) {
 	});
 }
 
-function addForm() {
+export function addForm() {
 	const full = state.botAccounts.length >= state.maxBotAccounts;
 	return `
 		<section class="shell-panel rounded-xl p-4">
@@ -123,7 +123,8 @@ function addForm() {
 }
 
 const SETTING_LABELS = [
-	['autoReady', 'Auto-ready', 'Bots ready up once every player in the lobby is ready, and unready if one backs out.'],
+	['botsSitOut', 'Sit out of matches (recommended)', "Bots can't play matches. A Ready bot makes matchmaking fail; sitting out lets your party queue while the bots wait in the lobby."],
+	['autoReady', 'Auto-ready (only if sit-out is off)', 'Bots ready up after every player is ready. Can stop the party finding a match.'],
 	['partyCommands', 'Lobby chat commands', 'Players type !ready, !unready, !sitout or !copy in lobby chat.'],
 	['dmCommands', 'DM commands', 'Friends DM a bot CID_ / EID_ / !level / !copy / !help and so on.'],
 	['emotePlayOnce', 'Play emotes once', 'Stop an emote after its length instead of looping it.'],
