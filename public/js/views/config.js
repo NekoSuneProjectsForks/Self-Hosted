@@ -79,7 +79,15 @@ export function renderConfig({ withAccounts = true } = {}) {
 					</label>
 					<label class="md:col-span-2" ${fnlb}>
 					<span class="label">Legacy FNLB API Token</span>
-					<input class="input" name="apiToken" type="password" ${NO_AUTOFILL} placeholder="${config.apiTokenConfigured ? `Saved: ${escapeHtml(config.apiTokenMasked)}` : 'API token'}" />
+					<input class="input" name="apiToken" type="password" ${NO_AUTOFILL} placeholder="${config.apiTokenConfigured ? `Saved: ${escapeHtml(config.apiTokenMasked)}` : 'FNLB_...'}" />
+					<span class="mt-2 block rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
+						<span class="flex items-center gap-1.5 font-semibold text-zinc-200">${icon('key-round', 'h-3.5 w-3.5')} Where do I find my FNLB API token?</span>
+						<span class="mt-1 block">1. Sign in to FNLB at <a href="https://app.fnlb.net/account" class="text-fnlb-300 underline hover:text-fnlb-200" target="_blank" rel="noopener noreferrer">app.fnlb.net/account</a> (or in the FNLB app).</span>
+						<span class="block">2. Open the <b>API tokens</b> section in your account settings and create a token.</span>
+						<span class="block">3. Copy it (it starts with <code class="text-zinc-300">FNLB_</code>), paste it here and press Save Config.</span>
+						<span class="mt-1 block text-zinc-500">The token can act as you, so keep it private. If it leaks, revoke it there and make a new one. More: <a href="https://developers.fnlb.net/docs/getting-started/authenticating" class="text-fnlb-300 underline hover:text-fnlb-200" target="_blank" rel="noopener noreferrer">FNLB docs</a>.</span>
+						<a class="btn-secondary mt-2 inline-flex" href="https://app.fnlb.net/account" target="_blank" rel="noopener noreferrer">${icon('external-link', 'h-3.5 w-3.5')} Open FNLB account page</a>
+					</span>
 					</label>
 					<label ${fnlb}>
 					<span class="label">Legacy FNLB Release Channel</span>
@@ -91,10 +99,12 @@ export function renderConfig({ withAccounts = true } = {}) {
 					<label class="md:col-span-2" ${fnlb}>
 					<span class="label">Legacy FNLB Categories (optional)</span>
 						<input class="input" name="categories" value="${escapeHtml(config.categories || '')}" placeholder="Leave empty for all categories, or 123456789,987654321" />
+						<span class="mt-1 block text-xs text-zinc-500">Category IDs: open <a href="https://app.fnlb.net/bots" class="text-fnlb-300 underline hover:text-fnlb-200" target="_blank" rel="noopener noreferrer">app.fnlb.net/bots</a>, select a bot and look under <b>About this bot</b>. Separate several with commas.</span>
 					</label>
 					<label class="md:col-span-2" ${fnlb}>
 					<span class="label">Legacy FNLB Bots (optional)</span>
 						<input class="input" name="bots" value="${escapeHtml(config.bots || '')}" placeholder="Leave empty for all bots, or botId1,botId2" />
+						<span class="mt-1 block text-xs text-zinc-500">Bot IDs: on <a href="https://app.fnlb.net/bots" class="text-fnlb-300 underline hover:text-fnlb-200" target="_blank" rel="noopener noreferrer">app.fnlb.net/bots</a>, select a bot and copy its <b>FNLB ID</b> under About this bot.</span>
 					</label>
 					<label class="md:col-span-2">
 						<span class="label">Cluster Name</span>
