@@ -76,7 +76,7 @@ export function registerListingRoutes(ctx) {
 				until: until || null,
 				engine,
 				botKey,
-				name: live?.displayName || listing?.displayName || name || botKey,
+				name: live?.displayName || listing?.displayName || name || 'Not signed in yet',
 				note,
 				online: Boolean(live),
 				isPublic: Boolean(listing?.isPublic),
@@ -85,8 +85,9 @@ export function registerListingRoutes(ctx) {
 			});
 		};
 		const fnlbAccounts = config.apiToken ? await fnlbBotInfo(userId) : new Map();
-		if (await localEngineAllowed(user)) {
-			add('fnbr', config.deviceAuth?.accountId, null, 'Main bot (local engine)');
+		// Local bots only while the local engine is selected (and allowed).
+		if (config.runtimeMode !== 'fnlb' && (await localEngineAllowed(user))) {
+			add('fnbr', config.deviceAuth?.accountId, 'Main bot', 'Main bot (local engine)');
 			for (const account of await listBotAccounts(userId)) {
 				if (!account.tracker) add('fnbr', account.accountId, account.displayName || account.label, `Extra bot · ${account.label}`);
 			}

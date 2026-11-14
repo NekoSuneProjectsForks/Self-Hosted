@@ -212,7 +212,7 @@ function communityPanel() {
 			<div class="mb-3 flex flex-wrap items-start justify-between gap-2">
 				<div>
 					<p class="flex items-center gap-2 font-semibold">${icon('globe')} Community listing</p>
-					<p class="mt-1 text-sm text-zinc-500"><b>Public</b> bots appear on the <a class="text-fnlb-300 underline" href="/public-lists" target="_blank" rel="noopener">community page</a> (no login needed), so anyone can add them and use them in a party. <b>Private</b> bots are yours only. It only lists a public bot while it's <b>running, not banned and free</b>: once someone has it in their party (or it's in a match) it's hidden until it's free again. The page only shows the name and your note: nobody else gets your friends, DMs, skins or settings.</p>
+					<p class="mt-1 text-sm text-zinc-500"><b>Public</b> bots appear on the <a class="text-fnlb-300 underline" href="/public-lists" target="_blank" rel="noopener">public bot list</a> (no login needed), so anyone can add them and use them in a party. <b>Private</b> bots are yours only. It only lists a public bot while it's <b>running, not banned and free</b>: once someone has it in their party (or it's in a match) it's hidden until it's free again. The page only shows the name and your note: nobody else gets your friends, DMs, skins or settings.</p>
 				</div>
 				<a class="btn-secondary" href="/public-lists" target="_blank" rel="noopener">${icon('external-link')} Open page</a>
 			</div>
@@ -277,9 +277,26 @@ function lockedPanel() {
 		</section>`;
 }
 
+/** Legacy FNLB selected: local-only tools (extra bots, lobby behaviour) are hidden. */
+function fnlbModePanel() {
+	return `
+		<section class="shell-panel rounded-xl p-4">
+			<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+				<div>
+					<p class="font-semibold">Your bots (Legacy FNLB)</p>
+					<p class="mt-1 text-sm text-zinc-500">Your FNLB bots run from your FNLB categories. Extra bots and lobby behaviour belong to the local engine, so they're hidden; choose the local engine in Advanced settings to use them.</p>
+				</div>
+				<button class="btn-secondary shrink-0" data-action="bot-settings" data-bot-key="main" data-tab="advanced">${icon('sliders-horizontal')} Advanced settings</button>
+			</div>
+		</section>`;
+}
+
 export function renderBotLobby() {
 	if (localLocked()) {
 		return `<div class="grid gap-4">${lockedPanel()}${communityPanel()}</div>`;
+	}
+	if (!usingLocalFnbr()) {
+		return `<div class="grid gap-4">${fnlbModePanel()}${communityPanel()}</div>`;
 	}
 	const accounts = state.botAccounts || [];
 	const online = accounts.filter((account) => account.status === 'online').length;

@@ -931,6 +931,8 @@ document.addEventListener('submit', async (event) => {
 			state.dashboard = null;
 			setToast('Config saved.');
 			render();
+			// Engine or FNLB token may have changed which bots can be listed.
+			loadListings().catch(() => {});
 		}
 		if (form.dataset.form === 'command-run') {
 			const result = await api(`/api/fnlb/bots/${encodeURIComponent(state.selectedBotId)}/commands/run`, {
