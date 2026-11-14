@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { setToast } from './ui.js';
 import { render } from './render.js';
 import { isControlled, isHelperBotId } from './selectors.js';
 import { api } from './api.js';
@@ -94,7 +95,17 @@ export function connectSocket() {
 	});
 
 	state.socket.on('friend:message', (message) => {
-		if (!message?.friendId || !isControlled(message.botId)) return;
+		if (!message?.friendId) return;
+		if (!isControlled(message.botId)) {
+			// A DM to one of your other bots: count it in the bot picker and say so.
+			if (message.direction === 'incoming' && message.botId) {
+				state.botUnread = { ...(state.botUnread || {}), [message.botId]: ((state.botUnread || {})[message.botId] || 0) + 1 };
+				const bot = (state.bots || []).find((row) => row.id === message.botId) || (state.botAccounts || []).find((row) => row.accountId === message.botId);
+				setToast(`New DM to ${bot?.nickname || bot?.label || 'another bot'} from ${message.friendName || 'a friend'}. Pick that bot to reply.`);
+				render();
+			}
+			return;
+		}
 		const thread = state.messages[message.friendId] || [];
 		state.messages = { ...state.messages, [message.friendId]: [...thread, message] };
 

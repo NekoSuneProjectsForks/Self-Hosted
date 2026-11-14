@@ -1131,6 +1131,7 @@ document.addEventListener('change', (event) => {
 /** Points the live pages at another bot and reloads its lobby/social state. */
 async function switchControlledBot(botId) {
 	state.controlBotId = botId;
+	if (botId && state.botUnread?.[botId]) state.botUnread = { ...state.botUnread, [botId]: 0 };
 	state.party = null;
 	state.partyMessages = [];
 	state.friends = { onlineFriends: [], offlineFriends: [] };

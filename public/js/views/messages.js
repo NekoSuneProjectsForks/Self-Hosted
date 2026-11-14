@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { botPicker } from './botPicker.js';
 import { controlBot, controlBotId, controlCan, controlCapabilities, controlOnline } from '../core/selectors.js';
 import { escapeHtml, formatDate, icon } from '../core/ui.js';
 
@@ -61,6 +62,13 @@ function conversationRow(row) {
 	`;
 }
 
+/** A friend's display name from the loaded lists (falls back to the ID). */
+function friendName(id) {
+	const all = [...(state.friends?.onlineFriends || []), ...(state.friends?.offlineFriends || [])];
+	const fromThread = (state.messages?.[id] || []).find((message) => message.friendName)?.friendName;
+	return state.selectedFriendName || all.find((friend) => friend.id === id)?.displayName || fromThread || id;
+}
+
 function thread() {
 	const id = state.selectedFriendId;
 	if (!id) {
@@ -70,7 +78,7 @@ function thread() {
 	const messages = state.messages?.[id] || [];
 	return `
 		<div class="shell-panel flex flex-1 flex-col rounded-lg p-4">
-			<p class="mb-3 font-semibold">${escapeHtml(state.selectedFriendName || id)}</p>
+			<p class="mb-3 font-semibold">${escapeHtml(friendName(id))}</p>
 			<div class="mb-3 flex-1 space-y-2 overflow-y-auto rounded-lg bg-black/30 p-3" id="dm-log" style="max-height: 420px">
 				${
 					messages.length
@@ -101,8 +109,10 @@ function thread() {
 }
 
 export function renderMessages() {
+	const picker = botPicker({ always: true, label: 'Bot' });
 	if (!controlOnline()) {
 		return `
+			${picker ? `<div class="mb-4 flex items-center gap-3"><p class="text-sm text-zinc-500">Messages of</p>${picker}</div>` : ''}
 			<div class="shell-panel rounded-lg p-6 text-center">
 				<p class="font-semibold">The bot is offline</p>
 				<p class="mt-1 text-sm text-zinc-500">Direct messages are sent and received by the running bot.</p>
@@ -121,12 +131,15 @@ export function renderMessages() {
 	const rows = conversations();
 	return `
 		<div class="grid gap-4">
-			<div class="flex items-center justify-between">
-				<p class="text-sm text-zinc-500">Friend DMs are separate from lobby chat, which lives on the Lobby page.</p>
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div class="flex flex-wrap items-center gap-3">
+					${picker ? `<p class="text-sm text-zinc-500">Typing as</p>${picker}` : ''}
+					<p class="text-sm text-zinc-500">Friend DMs are separate from lobby chat, which lives on the Lobby page.</p>
+				</div>
 				<button class="btn-secondary" data-action="refresh-friends">${icon('refresh-cw')} Refresh</button>
 			</div>
 			<div class="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-				<div class="grid max-h-[560px] gap-2 overflow-y-auto">
+				<div class="grid max-h-[560px] content-start gap-2 overflow-y-auto">
 					${rows.length ? rows.map(conversationRow).join('') : '<p class="text-sm text-zinc-500">No friends to message yet.</p>'}
 				</div>
 				${thread()}

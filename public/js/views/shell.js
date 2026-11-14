@@ -10,6 +10,7 @@ import { renderLobby } from './lobby.js';
 import { renderFriends } from './friends.js';
 import { renderMessages } from './messages.js';
 import { renderMatchModal, renderMatches } from './matches.js';
+import { botPicker } from './botPicker.js';
 import { renderBotLobby } from './botlobby.js';
 import { renderConsole } from './console.js';
 import { renderBotModal } from './botmodal.js';
@@ -84,22 +85,9 @@ function renderNav() {
 
 /** Chooses which bot the Lobby / Friends / Messages / Matches / Locker pages act on. */
 function controlPicker() {
-	const helpers = (state.botAccounts || []).filter((account) => account.status === 'online' && account.accountId);
-	if (!helpers.length) return '';
-	const mainName = state.bots?.[0]?.nickname || 'Main bot';
-	return `
-		<label class="flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-400" title="Which bot the live pages control">
-			${icon('gamepad-2')}
-			<select class="bg-transparent py-1 text-sm text-zinc-100 outline-none" data-action="control-bot">
-				<option class="bg-zinc-900" value="" ${!state.controlBotId ? 'selected' : ''}>${escapeHtml(mainName)} (main)</option>
-				${helpers
-					.map(
-						(account) =>
-							`<option class="bg-zinc-900" value="${escapeHtml(account.accountId)}" ${state.controlBotId === account.accountId ? 'selected' : ''}>${escapeHtml(account.label)}${account.displayName ? ` (${escapeHtml(account.displayName)})` : ''}</option>`
-					)
-					.join('')}
-			</select>
-		</label>`;
+	// Friends and Messages have their own picker at the top of the page.
+	if (['friends', 'messages'].includes(currentView())) return '';
+	return botPicker();
 }
 
 export function renderShell() {

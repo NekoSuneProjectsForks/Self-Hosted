@@ -103,13 +103,21 @@ const FNBR_CAPABILITIES = {
 
 /** The extra bot account currently being controlled, or null for the main bot. */
 export function controlledHelper() {
-	if (!state.controlBotId) return null;
+	if (!state.controlBotId || !usingLocalFnbr()) return null;
 	return (state.botAccounts || []).find((account) => account.accountId === state.controlBotId) || null;
+}
+
+/** Legacy FNLB: the FNLB bot picked in the bot picker (defaults to the first). */
+export function controlledFnlbBot() {
+	if (usingLocalFnbr()) return null;
+	const bots = state.bots || [];
+	return bots.find((bot) => bot.id === state.controlBotId) || bots[0] || null;
 }
 
 export function controlBotId() {
 	const helper = controlledHelper();
 	if (helper) return helper.accountId;
+	if (!usingLocalFnbr()) return controlledFnlbBot()?.id || state.selectedBotId || null;
 	return state.bots?.[0]?.id || state.selectedBotId || null;
 }
 
@@ -120,7 +128,9 @@ export function controlOnline() {
 
 export function controlBot() {
 	const helper = controlledHelper();
-	return helper ? helper.bot : state.bots?.[0] || null;
+	if (helper) return helper.bot;
+	if (!usingLocalFnbr()) return controlledFnlbBot();
+	return state.bots?.[0] || null;
 }
 
 export function controlCapabilities() {

@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { controlBot, controlBotId, controlCan, controlCapabilities, controlOnline } from '../core/selectors.js';
 import { escapeHtml, formatDate, icon, statusBadge, valueOrDash } from '../core/ui.js';
+import { botPicker } from './botPicker.js';
 
 function can(capability) {
 	return controlCan(capability);
@@ -146,10 +147,17 @@ function detailPanel() {
 	`;
 }
 
+/** "Bot: [picker]" row: see and manage any of your bots' friends. */
+function pickerRow() {
+	const picker = botPicker({ always: true, label: 'Bot' });
+	return picker ? `<div class="flex flex-wrap items-center gap-3"><p class="text-sm text-zinc-500">Showing friends of</p>${picker}</div>` : '';
+}
+
 export function renderFriends() {
 	if (!controlOnline()) {
 		return `
-			<div class="shell-panel rounded-lg p-6 text-center">
+			${pickerRow()}
+			<div class="mt-4 shell-panel rounded-lg p-6 text-center">
 				<p class="font-semibold">The bot is offline</p>
 				<p class="mt-1 text-sm text-zinc-500">Friends load from the running bot. Start it to manage them live.</p>
 			</div>
@@ -167,6 +175,7 @@ export function renderFriends() {
 
 	return `
 		<div class="grid gap-4">
+			${pickerRow()}
 			<section class="shell-panel rounded-lg p-4">
 				<div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
 					<form class="grid flex-1 gap-2 sm:grid-cols-[1fr_auto]" data-form="friend-add">
