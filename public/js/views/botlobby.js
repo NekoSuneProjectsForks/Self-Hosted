@@ -97,6 +97,34 @@ function addForm() {
 	`;
 }
 
+const SETTING_LABELS = [
+	['autoReady', 'Auto-ready', 'Bots ready up once every player in the lobby is ready, and unready if one backs out.'],
+	['partyCommands', 'Lobby chat commands', 'Players type !ready, !unready or !sitout in lobby chat and every bot follows.'],
+	['dmCommands', 'DM commands', 'Friends DM a bot CID_ / EID_ / !stats / !help and so on.'],
+	['acceptInvites', 'Accept party invites', 'Your own bots always accept each other either way.'],
+	['acceptFriendRequests', 'Accept friend requests', 'Your own bots always accept each other either way.']
+];
+
+function settingsPanel() {
+	const settings = state.lobbySettings;
+	if (!settings) return '';
+	return `
+		<section class="shell-panel rounded-lg p-4">
+			<p class="font-semibold">Lobby behaviour</p>
+			<p class="mt-1 text-sm text-zinc-500">Applies to the main bot and every extra bot straight away, with no restart.</p>
+			<div class="mt-3 grid gap-2 md:grid-cols-2">
+				${SETTING_LABELS.map(
+					([key, label, help]) => `
+					<label class="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.035] p-3 text-sm">
+						<input class="mt-1 h-4 w-4 accent-fnlb-500" type="checkbox" data-action="lobby-setting" data-setting="${key}" ${settings[key] ? 'checked' : ''} />
+						<span><span class="font-medium text-zinc-200">${label}</span><br /><span class="text-xs text-zinc-500">${help}</span></span>
+					</label>`
+				).join('')}
+			</div>
+		</section>
+	`;
+}
+
 export function renderBotLobby() {
 	const accounts = state.botAccounts || [];
 	const online = accounts.filter((account) => account.status === 'online').length;
@@ -124,6 +152,8 @@ export function renderBotLobby() {
 				</form>
 				<p class="mt-2 text-xs text-zinc-500">To join a friend's party, each bot must be friends with them. Pick a bot with <strong>Control</strong> and use the Friends page to add them. Friends can also DM any bot <code>!help</code> for lobby commands.</p>
 			</section>
+
+			${settingsPanel()}
 
 			${addForm()}
 

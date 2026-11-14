@@ -56,6 +56,10 @@ export class BaseRuntime {
 		throw this.unsupported('dashboard');
 	}
 
+	async getStats() {
+		throw this.unsupported('player stats');
+	}
+
 	async getBots() {
 		throw this.unsupported('listing bots');
 	}

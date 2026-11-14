@@ -7,6 +7,9 @@ import {
 	updateBotAccount
 } from '../services/botAccounts.js';
 import { asyncRoute, httpError } from '../http/helpers.js';
+import { getPlainConfig, updateLocalCategoryConfig } from '../services/configStore.js';
+
+const LOBBY_SETTINGS = ['autoReady', 'partyCommands', 'dmCommands', 'acceptInvites', 'acceptFriendRequests'];
 
 /**
  * Bot Lobby: extra Epic accounts that run as their own local fnbr clients next
@@ -143,6 +146,34 @@ export function registerBotAccountRoutes(ctx) {
 			const target = String(req.body?.target || '').trim();
 			if (!target) throw httpError(400, 'Give a friend name or party ID for the bots to join.');
 			return res.json({ results: await runtime.joinAllHelpersTo(req.user.id, target) });
+		})
+	);
+
+	// Lobby behaviour switches shared by the main bot and every extra bot.
+	app.get(
+		'/api/bot-lobby/settings',
+		...guard,
+		asyncRoute(async (req, res) => {
+			const config = (await getPlainConfig(req.user.id)).localCategory?.config || {};
+			return res.json({ settings: Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, config[key] !== false])) });
+		})
+	);
+
+	app.patch(
+		'/api/bot-lobby/settings',
+		...guard,
+		asyncRoute(async (req, res) => {
+			const body = req.body || {};
+			const changes = LOBBY_SETTINGS.filter((key) => body[key] !== undefined);
+			if (!changes.length) throw httpError(400, 'No lobby setting was provided.');
+			const localCategory = await updateLocalCategoryConfig(req.user.id, async (next) => {
+				for (const key of changes) next[key] = Boolean(body[key]);
+			});
+			runtime.applyLocalCategoryLive(req.user.id, localCategory);
+			return res.json({
+				settings: Object.fromEntries(LOBBY_SETTINGS.map((key) => [key, localCategory.config[key] !== false])),
+				content: 'Lobby settings saved and applied to the running bots.'
+			});
 		})
 	);
 

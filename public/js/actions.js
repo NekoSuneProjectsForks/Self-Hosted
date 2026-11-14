@@ -66,7 +66,15 @@ document.addEventListener('click', async (event) => {
 			if (view === 'admin') await loadAdmin();
 			if ((view === 'status' || view === 'categories' || view === 'items') && !state.dashboard) await loadDashboard(false);
 			if (view === 'lobby') await loadParty(false);
-			if (view === 'botlobby') await Promise.all([loadBotAccounts(false), loadParty(false).catch(() => {})]);
+			if (view === 'botlobby') {
+				await Promise.all([
+					loadBotAccounts(false),
+					loadParty(false).catch(() => {}),
+					api('/api/bot-lobby/settings').then((data) => {
+						state.lobbySettings = data.settings;
+					})
+				]);
+			}
 			if (view === 'friends' || view === 'messages') await loadFriends(false);
 			if (view === 'matches') await loadMatches(false);
 		} catch (error) {
@@ -240,6 +248,21 @@ document.addEventListener('click', async (event) => {
 			});
 			state.party = result.party || state.party;
 			setToast(result.results?.[0]?.content || 'Lobby updated.');
+			render();
+			return;
+		}
+		if (action === 'member-stats') {
+			const memberId = button.dataset.memberId;
+			state.memberStats = { ...state.memberStats, [memberId]: { loading: true } };
+			render();
+			try {
+				const stats = await api(
+					`/api/bots/${encodeURIComponent(activeBotId())}/stats?user=${encodeURIComponent(memberId)}`
+				);
+				state.memberStats = { ...state.memberStats, [memberId]: stats };
+			} catch (error) {
+				state.memberStats = { ...state.memberStats, [memberId]: { error: error.message } };
+			}
 			render();
 			return;
 		}
@@ -594,6 +617,19 @@ document.addEventListener('change', (event) => {
 	if (autoRefresh) state.autoRefresh = autoRefresh.checked;
 	const engineSelect = event.target.closest('[data-action="config-engine"]');
 	if (engineSelect) showEngineFields(engineSelect.form, engineSelect.value);
+	const lobbySetting = event.target.closest('[data-action="lobby-setting"]');
+	if (lobbySetting) {
+		api('/api/bot-lobby/settings', { method: 'PATCH', body: { [lobbySetting.dataset.setting]: lobbySetting.checked } })
+			.then((data) => {
+				state.lobbySettings = data.settings;
+				setToast(data.content);
+				render();
+			})
+			.catch((error) => {
+				setToast(error.message, 'error');
+				render();
+			});
+	}
 	const controlSelect = event.target.closest('[data-action="control-bot"]');
 	if (controlSelect) switchControlledBot(controlSelect.value || null);
 });

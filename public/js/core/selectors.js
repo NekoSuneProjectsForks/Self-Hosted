@@ -84,12 +84,16 @@ const FNBR_CAPABILITIES = {
 		playlist: true,
 		privacy: true,
 		readiness: true,
+		sittingOut: true,
+		squadFill: true,
 		presence: true,
 		matchTracking: true,
 		searchUsers: true,
 		promoteMember: true,
 		multiBot: true,
-		dmCommands: true
+		dmCommands: true,
+		autoReady: true,
+		playerStats: true
 	}
 };
 

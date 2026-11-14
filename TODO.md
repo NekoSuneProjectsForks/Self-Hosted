@@ -7,7 +7,7 @@ Legend: `[x]` done & self-verified · `[~]` partial · `[ ]` not started · `[!]
 
 Last updated: 2026-11-14
 
-**Test status: 80/80 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
+**Test status: 90/90 unit tests pass.** Live Epic login could not be tested here: the sandbox has no route to Epic.
 
 ---
 
@@ -180,3 +180,9 @@ modules plus a 167-line wiring file.
 - [x] `bots.routes.js` used `getBotSessions` without importing it
 - [x] `tests/botLobby.test.js` (15 tests)
 - [!] Needs a real test: extra bot login, direct join vs invite fallback on private parties, DM commands in game
+- [x] Auto-ready: bots ready once every player is ready, unready when one backs out, and keep a manual ready
+- [x] Lobby chat `!ready` / `!unready` / `!sitout` from players
+- [x] Player BR stats via fnbr `getBRStats` (Lobby Stats button, `!stats`, `GET /api/bots/:botId/stats`)
+- [x] Lobby behaviour settings (auto-ready, lobby chat commands, DM commands, accept invites and friend requests), applied live to every bot
+- [x] fnbr capabilities were missing `sittingOut` / `squadFill`, so the Sit Out and Fill buttons never showed
+- [ ] Not adopted: 2M4U/Fortnite-WebSocket-Client forges the matchmaking ticket checksum to queue a bot (an integrity bypass, out of scope). johndpope/FortniteClient is a 2019 bot on the dead library, with a party "crash" mode. Neither returns match stats.

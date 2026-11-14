@@ -195,6 +195,17 @@ export function registerBotRoutes(ctx) {
 		})
 	);
 
+	// Epic battle royale stats for any player (defaults to the bot itself).
+	app.get(
+		'/api/bots/:botId/stats',
+		requireAuth,
+		requireActive,
+		asyncRoute(async (req, res) => {
+			const adapter = runtime.requireActive(req.user.id, req.params.botId);
+			return res.json(await adapter.getStats(String(req.query.user || '').trim()));
+		})
+	);
+
 	app.get(
 		'/api/bots/:botId/blocked',
 		requireAuth,

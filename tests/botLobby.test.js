@@ -211,3 +211,115 @@ describe('friend DM commands', () => {
 		assert.equal(client.calls.length, 0);
 	});
 });
+
+describe('auto-ready', () => {
+	function lobby({ humans, trusted = [], config = {} }) {
+		const client = fakeClient('bot');
+		client.party.me.id = 'bot';
+		client.party.me.isReady = false;
+		client.party.me.setReadiness = async (ready) => {
+			client.calls.push(['setReadiness', ready]);
+			client.party.me.isReady = ready;
+		};
+		client.party.members = new Map([['bot', client.party.me], ...humans.map((m) => [m.id, m])]);
+		const runtime = runtimeFor(client, { trustedIds: () => trusted, config });
+		return { client, runtime };
+	}
+	const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+	it('readies once every player is ready', async () => {
+		const { client, runtime } = lobby({ humans: [{ id: 'p1', isReady: true }, { id: 'p2', isReady: true }] });
+		runtime.syncReadiness();
+		await settle();
+		assert.deepEqual(client.calls, [['setReadiness', true]]);
+	});
+
+	it('waits while a player is not ready', async () => {
+		const { client, runtime } = lobby({ humans: [{ id: 'p1', isReady: true }, { id: 'p2', isReady: false }] });
+		runtime.syncReadiness();
+		await settle();
+		assert.equal(client.calls.length, 0);
+	});
+
+	it('ignores the user\'s other bots when deciding', async () => {
+		const { client, runtime } = lobby({
+			humans: [{ id: 'p1', isReady: true }, { id: 'other-bot', isReady: false }],
+			trusted: ['other-bot']
+		});
+		runtime.syncReadiness();
+		await settle();
+		assert.deepEqual(client.calls, [['setReadiness', true]]);
+	});
+
+	it('does nothing in a lobby with no players', async () => {
+		const { client, runtime } = lobby({ humans: [{ id: 'other-bot', isReady: true }], trusted: ['other-bot'] });
+		runtime.syncReadiness();
+		await settle();
+		assert.equal(client.calls.length, 0);
+	});
+
+	it('unreadies when a player backs out, but keeps a manual !ready', async () => {
+		const player = { id: 'p1', isReady: true };
+		const { client, runtime } = lobby({ humans: [player] });
+		runtime.syncReadiness();
+		await settle();
+		player.isReady = false;
+		runtime.syncReadiness();
+		await settle();
+		assert.deepEqual(client.calls.at(-1), ['setReadiness', false]);
+
+		await runtime.setReadiness(true); // manual
+		runtime.syncReadiness();
+		await settle();
+		assert.deepEqual(client.calls.at(-1), ['setReadiness', true]);
+	});
+
+	it('can be switched off', async () => {
+		const { client, runtime } = lobby({ humans: [{ id: 'p1', isReady: true }], config: { autoReady: false } });
+		runtime.syncReadiness();
+		await settle();
+		assert.equal(client.calls.length, 0);
+	});
+});
+
+describe('lobby chat commands', () => {
+	const chat = (content, id = 'p1') => ({ author: { id }, content });
+
+	it('!ready in lobby chat readies the bot', async () => {
+		const client = fakeClient('bot');
+		await runtimeFor(client).handlePartyCommand(chat('!ready'));
+		assert.deepEqual(client.calls[0], ['setReadiness', true]);
+	});
+
+	it('ignores its own and the user\'s other bots\' messages', async () => {
+		const client = fakeClient('bot');
+		const runtime = runtimeFor(client, { trustedIds: () => ['other-bot'] });
+		await runtime.handlePartyCommand(chat('!ready', 'bot'));
+		await runtime.handlePartyCommand(chat('!ready', 'other-bot'));
+		assert.equal(client.calls.length, 0);
+	});
+});
+
+describe('player stats', () => {
+	it('returns overall stats from Epic', async () => {
+		const client = fakeClient('bot');
+		client.getBRStats = async (id) => ({
+			user: { id, displayName: 'Player' },
+			stats: { all: { overall: { matches: 10, wins: 2, kills: 30, kd: 3.75 } } }
+		});
+		const stats = await runtimeFor(client).getStats('p1');
+		assert.equal(stats.overall.wins, 2);
+		assert.equal(stats.overall.kills, 30);
+		assert.equal(stats.source, 'epic_stats');
+	});
+
+	it('reports private stats as 403', async () => {
+		const client = fakeClient('bot');
+		client.getBRStats = async () => {
+			const error = new Error('The user has set their stats to private');
+			error.name = 'StatsPrivacyError';
+			throw error;
+		};
+		await assert.rejects(runtimeFor(client).getStats('p1'), (error) => error.status === 403);
+	});
+});

@@ -204,12 +204,16 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				playlist: true,
 				privacy: true,
 				readiness: true,
+				sittingOut: true,
+				squadFill: true,
 				presence: true,
 				matchTracking: true,
 				searchUsers: true,
 				promoteMember: true,
 				multiBot: true,
-				dmCommands: true
+				dmCommands: true,
+				autoReady: true,
+				playerStats: true
 			}
 		};
 	}
@@ -340,7 +344,14 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			this.handleDmCommand(message).catch((error) => this.log(`DM command failed: ${error.message}`, 4));
 		});
 
+		// Auto-ready: follow the humans in the lobby. Each of the user's bots
+		// runs this independently, so every bot in the party converges.
+		for (const event of ['party:member:readiness:updated', 'party:member:joined', 'party:member:left', 'party:member:kicked']) {
+			client.on(event, () => this.syncReadiness());
+		}
+
 		client.on('party:member:message', (message) => {
+			this.handlePartyCommand(message).catch((error) => this.log(`Party command failed: ${error.message}`, 4));
 			this.log(`Party message from ${message.author?.displayName || message.author?.id}: ${message.content}`, 2);
 			this.emit('party:message', {
 				botId: this.botId(),
@@ -858,9 +869,12 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		return { content: fill ? 'Squad fill enabled.' : 'Squad fill disabled.', format: 1, source: 'fnbr' };
 	}
 
-	async setReadiness(ready) {
+	async setReadiness(ready, { auto = false } = {}) {
 		const { member } = this.requireMember();
 		await member.setReadiness(Boolean(ready));
+		// A manual ready/unready takes over from auto-ready until the humans
+		// change readiness again.
+		this.autoReadied = auto && Boolean(ready);
 		this.emitParty();
 		return { content: ready ? 'Bot marked ready.' : 'Bot marked not ready.', format: 1, source: 'fnbr' };
 	}
@@ -960,6 +974,112 @@ export class LocalFnbrRuntime extends BaseRuntime {
 		return { content: 'Emote cleared.', format: 1, source: 'fnbr', cosmetics };
 	}
 
+	// ----------------------------------------------------------- auto-ready
+
+	autoReadyEnabled() {
+		return this.startConfig.localCategory?.config?.autoReady !== false;
+	}
+
+	partyCommandsEnabled() {
+		return this.startConfig.localCategory?.config?.partyCommands !== false;
+	}
+
+	/** Party members that are real players, not this bot or the user's other bots. */
+	humanMembers() {
+		const client = this.client;
+		const selfId = client?.user?.self?.id;
+		return collectionValues(client?.party?.members).filter((member) => member.id !== selfId && !this.isTrusted(member.id));
+	}
+
+	/**
+	 * Readies the bot once every human in the lobby is ready (sitting out
+	 * counts as done), and unreadies it again when one of them backs out.
+	 * It only undoes a ready it set itself, so a manual !ready is kept.
+	 */
+	syncReadiness() {
+		if (!this.autoReadyEnabled() || this.readySyncing) return;
+		const me = this.client?.party?.me;
+		if (!me || !this.client?.isReady) return;
+
+		const humans = this.humanMembers();
+		const ready = (member) => safeValue(() => member.isReady, false);
+		const done = (member) => ready(member) || safeValue(() => member.isSittingOut, false);
+		const everyoneReady = humans.length > 0 && humans.every(done) && humans.some(ready);
+		const botReady = safeValue(() => me.isReady, false);
+
+		let want = null;
+		if (everyoneReady && !botReady) want = true;
+		else if (!everyoneReady && botReady && this.autoReadied) want = false;
+		if (want === null) return;
+
+		this.readySyncing = true;
+		this.setReadiness(want, { auto: true })
+			.then(() => this.log(want ? 'Auto-ready: everyone in the lobby is ready.' : 'Auto-ready: a player is no longer ready.', 2))
+			.catch((error) => this.log(`Auto-ready failed: ${error.message}`, 4))
+			.finally(() => {
+				this.readySyncing = false;
+			});
+	}
+
+	/** Lobby chat commands from players; every bot in the party reacts. */
+	async handlePartyCommand(message) {
+		if (!this.partyCommandsEnabled()) return;
+		const authorId = message.author?.id;
+		if (!authorId || authorId === this.client?.user?.self?.id || this.isTrusted(authorId)) return;
+		const command = String(message.content ?? '').trim().toLowerCase();
+		if (command === '!ready') return this.setReadiness(true);
+		if (command === '!unready') return this.setReadiness(false);
+		if (command === '!sitout') return this.setSittingOut(true);
+		return undefined;
+	}
+
+	// ---------------------------------------------------------------- stats
+
+	/**
+	 * Battle royale stats from Epic's stats service for any player (or the bot
+	 * itself). Players who set their stats to private get a clear 403.
+	 */
+	async getStats(target) {
+		const client = this.requireClient();
+		const value = String(target || '').trim() || client.user.self.id;
+		const friend = client.friend.resolve(value);
+		let stats;
+		try {
+			stats = await client.getBRStats(friend?.id || value);
+		} catch (error) {
+			if (error?.name === 'StatsPrivacyError' || /private/i.test(error?.message || '')) {
+				throw runtimeError(403, `${friend?.displayName || value} has their stats set to private.`);
+			}
+			if (error?.name === 'UserNotFoundError') throw runtimeError(404, `No Epic account called ${value}.`);
+			throw runtimeError(error.status || 502, `Could not load stats: ${error.message}`);
+		}
+		const pick = (row) =>
+			row
+				? {
+						matches: row.matches ?? 0,
+						wins: row.wins ?? 0,
+						winRate: row.winRate ?? null,
+						kills: row.kills ?? 0,
+						kd: row.kd ?? null,
+						killsPerMatch: row.killsPerMatch ?? null,
+						top10: row.top10 ?? null,
+						top25: row.top25 ?? null,
+						minutesPlayed: row.minutesPlayed ?? null,
+						lastModified: row.lastModified ?? null
+					}
+				: null;
+		const all = stats?.stats?.all || {};
+		return {
+			user: serializeUser(stats?.user) || { id: friend?.id || value, displayName: friend?.displayName || value },
+			overall: pick(all.overall),
+			solo: pick(all.solo),
+			duo: pick(all.duo),
+			squad: pick(all.squad),
+			ltm: pick(all.ltm),
+			source: 'epic_stats'
+		};
+	}
+
 	// ---------------------------------------------------------- DM commands
 
 	dmCommandsEnabled() {
@@ -1021,7 +1141,7 @@ export class LocalFnbrRuntime extends BaseRuntime {
 			case '!help':
 			case '!commands':
 				return reply(
-					'Commands: CID_ / BID_ / Pickaxe_ID_ / EID_ <id>, !ready, !unready, !sitout, !stopemote, !status <text>, !join, !leave'
+					'Commands: CID_ / BID_ / Pickaxe_ID_ / EID_ <id>, !ready, !unready, !sitout, !stopemote, !status <text>, !stats [name], !join, !leave'
 				);
 			case '!ready':
 				return attempt(() => this.setReadiness(true), 'Ready!');
@@ -1037,6 +1157,16 @@ export class LocalFnbrRuntime extends BaseRuntime {
 				return attempt(() => this.setStatus(args), `Status set to ${args}.`);
 			case '!join':
 				return attempt(() => this.joinParty(friendId), (result) => result.content);
+			case '!stats':
+				return attempt(
+					() => this.getStats(args || friendId),
+					(stats) => {
+						const o = stats.overall;
+						if (!o) return `${stats.user.displayName}: no stats yet.`;
+						const kd = o.kd == null ? '-' : Number(o.kd).toFixed(2);
+						return `${stats.user.displayName}: ${o.wins} wins, ${o.kills} kills, ${o.matches} matches, K/D ${kd}`;
+					}
+				);
 			case '!leave':
 				return attempt(() => this.leaveParty(), 'Left the party.');
 			default:

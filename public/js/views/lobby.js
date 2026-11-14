@@ -64,6 +64,7 @@ function memberCard(member, leaderId) {
 					)
 					.join('')}
 			</dl>
+			${memberStats(member)}
 			${
 				can('party') && !isLeader
 					? `<div class="mt-3 flex flex-wrap gap-2">
@@ -74,6 +75,38 @@ function memberCard(member, leaderId) {
 			}
 		</div>
 	`;
+}
+
+/** Epic BR stats for a member, loaded on demand. Nothing is shown until loaded. */
+function memberStats(member) {
+	if (!can('playerStats')) return '';
+	const entry = state.memberStats?.[member.id];
+	const button = `<button class="btn-secondary mt-3" data-action="member-stats" data-member-id="${escapeHtml(member.id)}">${icon('bar-chart-3')} ${entry ? 'Refresh stats' : 'Stats'}</button>`;
+	if (!entry) return button;
+	if (entry.loading) return `<p class="mt-3 text-xs text-zinc-500">Loading stats...</p>`;
+	if (entry.error) return `<p class="mt-3 text-xs text-amber-300">${escapeHtml(entry.error)}</p>${button}`;
+	const rows = [
+		['Overall', entry.overall],
+		['Solo', entry.solo],
+		['Duo', entry.duo],
+		['Squad', entry.squad]
+	].filter(([, row]) => row && row.matches);
+	if (!rows.length) return `<p class="mt-3 text-xs text-zinc-500">No battle royale matches on record.</p>${button}`;
+	const kd = (value) => (value == null ? '-' : Number(value).toFixed(2));
+	return `
+		<table class="mt-3 w-full text-xs text-zinc-300">
+			<thead class="text-zinc-500"><tr><th class="text-left font-normal"></th><th class="font-normal">Wins</th><th class="font-normal">Kills</th><th class="font-normal">K/D</th><th class="font-normal">Matches</th></tr></thead>
+			<tbody>
+				${rows
+					.map(
+						([label, row]) =>
+							`<tr><td>${label}</td><td class="text-center">${row.wins}</td><td class="text-center">${row.kills}</td><td class="text-center">${kd(row.kd)}</td><td class="text-center">${row.matches}</td></tr>`
+					)
+					.join('')}
+			</tbody>
+		</table>
+		<p class="mt-1 text-[11px] text-zinc-600">From Epic's stats service.</p>
+		${button}`;
 }
 
 export function renderLobby() {
@@ -151,6 +184,7 @@ function renderLobbyControls(isLeader) {
 		<section class="shell-panel rounded-lg p-4">
 			<p class="mb-3 font-semibold">Lobby controls</p>
 			${leaderNote}
+			${can('autoReady') ? `<p class="mb-3 text-xs text-zinc-500">${icon('check-check', 'mr-1 inline h-3 w-3')} ${state.config?.localCategory?.config?.autoReady === false ? 'Auto-ready is off.' : 'Auto-ready is on: the bots ready up once every player is ready. Players can also type <code>!ready</code> / <code>!unready</code> in lobby chat.'}</p>` : ''}
 			<div class="flex flex-wrap gap-2">
 				${can('readiness') ? `
 					<button class="btn-secondary" data-action="party-ready">${icon('check')} Ready</button>

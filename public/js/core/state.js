@@ -19,6 +19,9 @@ export const state = {
 	maxBotAccounts: 15,
 	mainBotId: null,
 	controlBotId: null,
+	// Epic stats looked up from the Lobby page, keyed by account ID.
+	memberStats: {},
+	lobbySettings: null,
 	quickCommands: [],
 	userSearchResults: [],
 	itemSearchResults: [],

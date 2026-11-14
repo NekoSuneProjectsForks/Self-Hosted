@@ -188,11 +188,34 @@ Friends can message any local bot (main or extra):
 | `!ready` / `!unready` / `!sitout` | Readiness |
 | `!stopemote` | Clear the emote |
 | `!status <text>` | Presence status |
+| `!stats [name]` | The sender's (or that player's) BR wins, kills, matches and K/D |
 | `!join` / `!leave` | Join the sender's party / leave the party |
 | `!help` | List the commands |
 
 Messages between your own bots are ignored, so two bots can never get into a
-loop. Set `dmCommands: false` in the local loadout config to turn the commands off.
+loop.
+
+### Auto-ready and lobby chat commands
+
+- **Auto-ready**: every bot readies up once every player in the lobby is ready.
+  Sitting out counts as done, and your own bots don't count as players. If a
+  player unreadies, the bots unready too, but a bot you readied by hand with
+  `!ready` or the dashboard stays ready.
+- **Lobby chat**: any player can type `!ready`, `!unready` or `!sitout` in lobby
+  chat, and every bot in the party follows.
+
+Turn each of these on or off under **Bot Lobby → Lobby behaviour**, along with
+DM commands, accepting invites and accepting friend requests. Changes apply to
+every running bot at once, with no restart.
+
+### Player stats
+
+The Lobby page has a **Stats** button on each party member. It shows overall,
+solo, duo and squad wins, kills, K/D and matches from Epic's stats service
+(`GET /api/bots/:botId/stats?user=`). Players who set their stats to private
+show as private; nothing is guessed. The bots only sit in the lobby and never
+play a match, so per-match kills and placement still come only from replay
+uploads or manual entry.
 
 ### What is *not* claimed
 

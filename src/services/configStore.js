@@ -16,6 +16,10 @@ const DEFAULT_LOCAL_CATEGORY = {
 		startBannedBots: false,
 		acceptInvites: true,
 		acceptFriendRequests: true,
+		// Lobby-bot behaviour (all live, no restart).
+		autoReady: true,
+		partyCommands: true,
+		dmCommands: true,
 		startOutfit: [],
 		startBackpack: [],
 		startPickaxe: [],

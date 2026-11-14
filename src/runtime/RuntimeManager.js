@@ -121,12 +121,16 @@ const OFFLINE_CAPABILITIES = {
 			playlist: true,
 			privacy: true,
 			readiness: true,
+			sittingOut: true,
+			squadFill: true,
 			presence: true,
 			matchTracking: true,
 			searchUsers: true,
 			promoteMember: true,
 			multiBot: true,
-			dmCommands: true
+			dmCommands: true,
+			autoReady: true,
+			playerStats: true
 		}
 	},
 	fnlb: {
@@ -143,6 +147,8 @@ const OFFLINE_CAPABILITIES = {
 			playlist: true,
 			privacy: false,
 			readiness: true,
+			sittingOut: true,
+			squadFill: true,
 			sittingOut: false,
 			squadFill: false,
 			presence: true,
@@ -967,6 +973,19 @@ export class RuntimeManager {
 	/** Every online extra bot joins a friend's party (each must be their friend). */
 	joinAllHelpersTo(userId, target) {
 		return this.forEachOnlineHelper(userId, (entry) => entry.adapter.joinParty(target));
+	}
+
+	/** Pushes a saved loadout/behaviour change to every running bot of the user. */
+	applyLocalCategoryLive(userId, localCategory) {
+		const main = this.get(userId).adapter;
+		if (main?.engine === 'fnbr') main.updateLocalCategory(localCategory);
+		for (const entry of this.helpers.get(userId)?.values() || []) {
+			entry.adapter?.updateLocalCategory(localCategory);
+		}
+		// Re-check readiness right away so turning auto-ready on takes effect now.
+		for (const adapter of [main, ...[...(this.helpers.get(userId)?.values() || [])].map((e) => e.adapter)]) {
+			if (adapter?.engine === 'fnbr') adapter.syncReadiness?.();
+		}
 	}
 
 	leaveAllHelpers(userId) {
